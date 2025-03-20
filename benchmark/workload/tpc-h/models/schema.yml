@@ -1,0 +1,189 @@
+version: 2
+
+sources:
+  - name: tpch
+    schema: tpch
+    tables:
+      - name: lineitem
+      - name: orders
+      - name: customer
+      - name: part
+      - name: partsupp
+      - name: supplier
+      - name: nation
+      - name: region
+
+models:
+  - name: tpch_q01
+    description: "TPC-H Query 01"
+    depends_on:
+      - source('tpch', 'lineitem')
+
+  - name: tpch_q02
+    description: "TPC-H Query 02"
+    depends_on:
+      - source('tpch', 'part')
+      - source('tpch', 'supplier')
+      - source('tpch', 'partsupp')
+      - source('tpch', 'nation')
+      - source('tpch', 'region')
+      - source('tpch', 'partsupp')
+      - source('tpch', 'supplier')
+      - source('tpch', 'nation')
+      - source('tpch', 'region')
+
+  - name: tpch_q03
+    description: "TPC-H Query 03"
+    depends_on:
+      - source('tpch', 'customer')
+      - source('tpch', 'orders')
+      - source('tpch', 'lineitem')
+
+  - name: tpch_q04
+    description: "TPC-H Query 04"
+    depends_on:
+      - source('tpch', 'orders')
+      - source('tpch', 'lineitem')
+
+  - name: tpch_q05
+    description: "TPC-H Query 05"
+    depends_on:
+      - source('tpch', 'customer')
+      - source('tpch', 'orders')
+      - source('tpch', 'lineitem')
+      - source('tpch', 'supplier')
+      - source('tpch', 'nation')
+      - source('tpch', 'region')
+
+  - name: tpch_q06
+    description: "TPC-H Query 06"
+    depends_on:
+      - source('tpch', 'lineitem')
+
+  - name: tpch_q07
+    description: "TPC-H Query 07"
+    depends_on:
+      - source('tpch', 'supplier')
+      - source('tpch', 'lineitem')
+      - source('tpch', 'orders')
+      - source('tpch', 'customer')
+      - source('tpch', 'nation')
+      - source('tpch', 'nation')
+
+  - name: tpch_q08
+    description: "TPC-H Query 08"
+    depends_on:
+      - source('tpch', 'part')
+      - source('tpch', 'supplier')
+      - source('tpch', 'lineitem')
+      - source('tpch', 'orders')
+      - source('tpch', 'customer')
+      - source('tpch', 'nation')
+      - source('tpch', 'nation')
+      - source('tpch', 'region')
+
+  - name: tpch_q09
+    description: "TPC-H Query 09"
+    depends_on:
+      - source('tpch', 'part')
+      - source('tpch', 'supplier')
+      - source('tpch', 'lineitem')
+      - source('tpch', 'partsupp')
+      - source('tpch', 'orders')
+      - source('tpch', 'nation')
+
+  - name: tpch_q10
+    description: "TPC-H Query 10"
+    depends_on:
+      - source('tpch', 'customer')
+      - source('tpch', 'orders')
+      - source('tpch', 'lineitem')
+      - source('tpch', 'nation')
+
+  - name: tpch_q11
+    description: "TPC-H Query 11"
+    depends_on:
+      - source('tpch', 'partsupp')
+      - source('tpch', 'supplier')
+      - source('tpch', 'nation')
+      - source('tpch', 'partsupp')
+      - source('tpch', 'supplier')
+      - source('tpch', 'nation')
+
+  - name: tpch_q12
+    description: "TPC-H Query 12"
+    depends_on:
+      - source('tpch', 'orders')
+      - source('tpch', 'lineitem')
+
+  - name: tpch_q13
+    description: "TPC-H Query 13"
+    depends_on:
+      - source('tpch', 'customer')
+      - source('tpch', 'orders')
+
+  - name: tpch_q14
+    description: "TPC-H Query 14"
+    depends_on:
+      - source('tpch', 'lineitem')
+      - source('tpch', 'part')
+
+  - name: tpch_q15
+    description: "TPC-H Query 15"
+    depends_on:
+      - source('tpch', 'lineitem')
+      - source('tpch', 'supplier')
+
+  - name: tpch_q16
+    description: "TPC-H Query 16"
+    depends_on:
+      - source('tpch', 'partsupp')
+      - source('tpch', 'part')
+      - source('tpch', 'supplier')
+
+  - name: tpch_q17
+    description: "TPC-H Query 17"
+    depends_on:
+      - source('tpch', 'lineitem')
+      - source('tpch', 'part')
+      - source('tpch', 'lineitem')
+
+  - name: tpch_q18
+    description: "TPC-H Query 18"
+    depends_on:
+      - source('tpch', 'customer')
+      - source('tpch', 'orders')
+      - source('tpch', 'lineitem')
+      - source('tpch', 'lineitem')
+
+  - name: tpch_q19
+    description: "TPC-H Query 19"
+    depends_on:
+      - source('tpch', 'lineitem')
+      - source('tpch', 'part')
+
+  - name: tpch_q20
+    description: "TPC-H Query 20"
+    depends_on:
+      - source('tpch', 'supplier')
+      - source('tpch', 'nation')
+      - source('tpch', 'partsupp')
+      - source('tpch', 'part')
+      - source('tpch', 'lineitem')
+
+  - name: tpch_q21
+    description: "TPC-H Query 21"
+    depends_on:
+      - source('tpch', 'supplier')
+      - source('tpch', 'lineitem')
+      - source('tpch', 'orders')
+      - source('tpch', 'nation')
+      - source('tpch', 'lineitem')
+      - source('tpch', 'lineitem')
+
+  - name: tpch_q22
+    description: "TPC-H Query 22"
+    depends_on:
+      - source('tpch', 'customer')
+      - source('tpch', 'customer')
+      - source('tpch', 'orders')
