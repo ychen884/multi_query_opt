@@ -1,0 +1,1 @@
+CREATE TABLE "dev"."main"."q04" AS SELECT o_orderpriority, COUNT(*) AS order_count FROM "dev"."tpch"."orders" WHERE o_orderdate >= CAST('1993-07-01' AS DATE) AND o_orderdate < CAST('1993-10-01' AS DATE) AND EXISTS(SELECT * FROM "dev"."tpch"."lineitem" WHERE l_orderkey = o_orderkey AND l_commitdate < l_receiptdate) GROUP BY o_orderpriority ORDER BY o_orderpriority NULLS FIRST
