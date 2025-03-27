@@ -4,10 +4,11 @@ import networkx as nx
 import sqlglot
 from sqlglot import exp
 
-def load_dbt_manifest(manifest_path):
-    with open(manifest_path, "r") as f:
-        return json.load(f)
+from rewriter import Rewriter
+from rewrite_rules import *
+from utils import *
 
+# updated to not include source tables as nodes in graph
 def build_full_graph(manifest):
     """Build a full DAG of all models from the manifest."""
     G = nx.DiGraph()
@@ -15,22 +16,10 @@ def build_full_graph(manifest):
         if node_data["resource_type"] == "model":
             G.add_node(node_id)
             for dep_id in node_data["depends_on"]["nodes"]:
-                G.add_edge(dep_id, node_id)
+                if dep_id in manifest["nodes"]:
+                    G.add_edge(dep_id, node_id)
+    assert nx.is_directed_acyclic_graph(G), "Graph is not a DAG!"
     return G
-
-def get_compiled_path(manifest, node_id):
-    node_data = manifest["nodes"][node_id]
-    return node_data.get("compiled_path")
-
-def is_in_folder(manifest, node_id, folder_name):
-    """
-    Check if the compiled SQL path includes 'folder_name', e.g. "models/MQO_1".
-    Adjust logic if your path check is different.
-    """
-    cpath = get_compiled_path(manifest, node_id)
-    if cpath and folder_name in cpath:
-        return True
-    return False
 
 def gather_subgraph(graph, manifest, folder_name):
     """
@@ -64,7 +53,7 @@ def extract_nodes_with_materialized_table(manifest):
         manifest (dict): The manifest loaded from a JSON file.
 
     Returns:
-        set: A set containing the names of the nodes that have "materialized": "table".
+        set: A set containing the relational names of the nodes that have "materialized": "table".
     """
     result = set()
     
@@ -72,7 +61,7 @@ def extract_nodes_with_materialized_table(manifest):
     for node in nodes.values():
         config = node.get("config", {})
         if config.get("materialized") == "table":
-            node_name = node.get("name")
+            node_name = node.get("relation_name")
             if node_name:  # ensure the node has a name
                 result.add(node_name)
     return result
@@ -97,7 +86,7 @@ def rewrite_ast_to_create_table(ast_obj, table_name, materialized_required_info)
     )
     # print("Create expr: ", create_expr.to_s())
     
-    create_sql = create_expr.sql(dialect="duckdb")
+    create_sql = create_expr.sql(dialect=REWRITER_DIALECT)
     # remove unncessary ""xx""
     create_sql = create_sql.replace('""', '"')
      
@@ -116,12 +105,13 @@ def main():
     # Build the full graph
     full_graph = build_full_graph(manifest)
 
-    # Filter to only models in "models/MQO_1/"
+    # Filter to only models in folder_name
     # (plus their upstream dependencies if any)
-    folder_name = "models/tpch_queries/"
+    # folder_name = "models/tpch_queries/"
+    folder_name = "models/MQO_1/"
     print(full_graph.nodes)
     subG = full_graph
-    # subG = gather_subgraph(full_graph, manifest, folder_name)
+    subG = gather_subgraph(full_graph, manifest, folder_name)
 
     # print nodes and edges
     print(f"Subgraph nodes ({len(subG.nodes)}):")
@@ -130,46 +120,53 @@ def main():
     print(f"Subgraph edges ({len(subG.edges)}):")
     for edge in subG.edges:
         print(f"  {edge}")
+
+    # Extract the names of nodes that have "materialized": "table"
+    materialized_required_info = extract_nodes_with_materialized_table(manifest)
+    print(f"[INFO] materizlied nodes: {materialized_required_info}")
+    
+    # get_compiled_path(manifest, list(nx.topological_sort(subG))[0])
+    # apply rewriter, potentially should use materialized_required_info
+    print("[INFO] Applying rewriter...")
+    rewriter = Rewriter(manifest, subG)
+    rewriter.set_rules([
+        # Add rewrite rules here
+        PredicatePushdownRule()
+    ])
+    rewriter.run()
+    print("[INFO] Rewriting DONE!")
+    opt_subG = rewriter.graph   # in later versions this graph might have changed 
+    opt_subG_asts = rewriter.asts
     
     # Topological sort on the subgraph
-    sorted_nodes = list(nx.topological_sort(subG))
+    sorted_nodes = list(nx.topological_sort(opt_subG))
 
     print("Filtered Subgraph (topological order):")
     for node in sorted_nodes:
         print(f"  {node}")
-
-    materialized_required_info = extract_nodes_with_materialized_table(manifest)
-    print("Materialized required info: ", materialized_required_info)
     # Parse each node's compiled SQL with SQLGlot
     for node_id in sorted_nodes:
         print(f"Processing node: {node_id}")
-        if node_id not in manifest["nodes"]:
-            print(f"[WARN] Node {node_id} not found in manifest.")
-            continue
         cpath = get_compiled_path(manifest, node_id)
-        
         output_folder = "optimized_sql"
         os.makedirs(output_folder, exist_ok=True)
-        if cpath and os.path.isfile(cpath):
-            with open(cpath) as f:
-                sql_str = f.read()
-            try:
-                ast = sqlglot.parse_one(sql_str)
-                # print(f"\n---\nParsed AST for [{node_id}]:\n{ast.to_s()}")
-                node_data = manifest["nodes"][node_id]
-                dbt_relation_name = node_data.get("relation_name")
-                create_table_sql = rewrite_ast_to_create_table(ast, dbt_relation_name, materialized_required_info)
-                print(f"Rewritten CREATE TABLE statement:\n{create_table_sql}\n")
-                
-                base_filename = os.path.basename(cpath)
-                out_filename = f"optimized_sql_{base_filename}"
-                out_path = os.path.join(output_folder, out_filename)
-                with open(out_path, "w") as out_file:
-                    out_file.write(create_table_sql)
-                print(f"[INFO] Wrote optimized SQL to: {out_path}\n")
-                
-            except Exception as e:
-                print(f"[WARN] Could not parse [{node_id}]: {e}")
+        try:
+            ast = opt_subG_asts[node_id]
+            # print(f"\n---\nParsed AST for [{node_id}]:\n{ast.to_s()}")
+            node_data = manifest["nodes"][node_id]
+            dbt_relation_name = node_data.get("relation_name")
+            create_table_sql = rewrite_ast_to_create_table(ast, dbt_relation_name, materialized_required_info)
+            print(f"@@@ Rewritten CREATE TABLE statement:\n{create_table_sql}\n")
+            
+            base_filename = os.path.basename(cpath)
+            out_filename = f"optimized_sql_{base_filename}"
+            out_path = os.path.join(output_folder, out_filename)
+            with open(out_path, "w") as out_file:
+                out_file.write(create_table_sql)
+            print(f"[INFO] Wrote optimized SQL to: {out_path}\n")
+            
+        except Exception as e:
+            print(f"[WARN] Could not write parsed SQL for [{node_id}]: {e}")
 
 if __name__ == "__main__":
     main()

@@ -3,10 +3,9 @@ import os
 import networkx as nx
 import sqlglot
 from sqlglot import exp
-
-def load_dbt_manifest(manifest_path):
-    with open(manifest_path, "r") as f:
-        return json.load(f)
+from rewriter import Rewriter
+from rewrite_rules import *
+from utils import *
 
 def build_full_graph(manifest):
     """Build a full DAG of all models from the manifest."""
@@ -16,21 +15,8 @@ def build_full_graph(manifest):
             G.add_node(node_id)
             for dep_id in node_data["depends_on"]["nodes"]:
                 G.add_edge(dep_id, node_id)
+    assert nx.is_directed_acyclic_graph(G), "Graph is not a DAG!"
     return G
-
-def get_compiled_path(manifest, node_id):
-    node_data = manifest["nodes"][node_id]
-    return node_data.get("compiled_path")
-
-def is_in_folder(manifest, node_id, folder_name):
-    """
-    Check if the compiled SQL path includes 'folder_name', e.g. "models/MQO_1".
-    Adjust logic if your path check is different.
-    """
-    cpath = get_compiled_path(manifest, node_id)
-    if cpath and folder_name in cpath:
-        return True
-    return False
 
 def gather_subgraph(graph, manifest, folder_name):
     """
@@ -68,7 +54,7 @@ def extract_nodes_with_materialized_table(manifest):
         manifest (dict): The manifest loaded from a JSON file.
 
     Returns:
-        set: A set containing the names of the nodes that have "materialized": "table".
+        set: A set containing the relational names of the nodes that have "materialized": "table".
     """
     result = set()
     
@@ -76,7 +62,7 @@ def extract_nodes_with_materialized_table(manifest):
     for node in nodes.values():
         config = node.get("config", {})
         if config.get("materialized") == "table":
-            node_name = node.get("name")
+            node_name = node.get("relation_name")
             if node_name:  # ensure the node has a name
                 result.add(node_name)
     return result
@@ -100,7 +86,7 @@ def rewrite_ast_to_create_table(ast_obj, table_name, materialized_required_info)
     )
     # print("Create expr: ", create_expr.to_s())
     
-    create_sql = create_expr.sql(dialect="duckdb")
+    create_sql = create_expr.sql(dialect=REWRITER_DIALECT)
     # remove unncessary ""xx""
     create_sql = create_sql.replace('""', '"')
      
@@ -131,30 +117,48 @@ def main():
     print(f"Subgraph edges ({len(subG.edges)}):")
     for edge in subG.edges:
         print(f"  {edge}")
+        
+    materialized_required_info = extract_nodes_with_materialized_table(manifest)
+    print(f"[INFO] materizlied nodes: {materialized_required_info}")
+
+    # apply rewriter
+    print("[INFO] Applying rewriter...")
+    rewriter = Rewriter(manifest, subG)
+    rewriter.set_rules([
+        # Add rewrite rules here
+        PredicatePushdownRule()
+    ])
+    rewriter.run()
+    print("[INFO] Rewriting DONE!")
+    opt_subG = rewriter.graph   # in later versions this graph might have changed 
+    opt_subG_asts = rewriter.asts
     
     # Topological sort on the subgraph
-    sorted_nodes = list(nx.topological_sort(subG))
+    sorted_nodes = list(nx.topological_sort(opt_subG))
 
     print("Filtered Subgraph (topological order):")
     for node in sorted_nodes:
         print(f"  {node}")
-
-    materialized_required_info = extract_nodes_with_materialized_table(manifest)
     # Parse each node's compiled SQL with SQLGlot
     for node_id in sorted_nodes:
         cpath = get_compiled_path(manifest, node_id)
         node_data = manifest["nodes"][node_id]
         dbt_relation_name = node_data.get("relation_name")
-        if cpath and os.path.isfile(cpath):
-            with open(cpath) as f:
-                sql_str = f.read()
-            try:
-                ast = sqlglot.parse_one(sql_str)
-                # print(f"\n---\nParsed AST for [{node_id}]:\n{ast.to_s()}")
-                create_table_sql = rewrite_ast_to_create_table(ast, dbt_relation_name, materialized_required_info)
-                print(f"Rewritten CREATE TABLE statement:\n{create_table_sql}\n")
-            except Exception as e:
-                print(f"[WARN] Could not parse [{node_id}]: {e}")
+        create_table_sql = rewrite_ast_to_create_table(
+            opt_subG_asts[node_id], dbt_relation_name, materialized_required_info)
+        print(f"@@@ Rewritten CREATE TABLE statement:\n{create_table_sql}\n")
+        
+        # print(f"[INFO] dbt relation name: {dbt_relation_name}")
+        # if cpath and os.path.isfile(cpath):
+        #     with open(cpath) as f:
+        #         sql_str = f.read()
+        #     try:
+        #         ast = sqlglot.parse_one(sql_str)
+        #         # print(f"\n---\nParsed AST for [{node_id}]:\n{ast.to_s()}")
+        #         create_table_sql = rewrite_ast_to_create_table(ast, dbt_relation_name, materialized_required_info)
+        #         print(f"Rewritten CREATE TABLE statement:\n{create_table_sql}\n")
+        #     except Exception as e:
+        #         print(f"[WARN] Could not parse [{node_id}]: {e}")
 
 if __name__ == "__main__":
     main()

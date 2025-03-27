@@ -1,0 +1,1 @@
+CREATE TABLE "dev"."main"."my_raw_orders" AS SELECT 1 AS order_id, 2 AS customer_id, 100.0 AS amount, '2023-01-01' AS order_date UNION ALL SELECT 2, 2, 50.0, '2023-01-02' UNION ALL SELECT 3, 3, 75.0, '2022-12-31' WHERE order_date >= '2023-01-01'

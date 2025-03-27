@@ -1,0 +1,1 @@
+CREATE TABLE "dev"."main"."recent_orders" AS SELECT order_id, customer_id, amount, order_date FROM "dev"."main"."my_raw_orders"

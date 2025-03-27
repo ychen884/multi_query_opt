@@ -1,0 +1,1 @@
+CREATE TABLE "dev"."main"."daily_aggregates" AS SELECT order_date, SUM(amount) AS total FROM "dev"."main"."my_raw_orders" GROUP BY order_date
