@@ -22,6 +22,7 @@ class RewriteRule:
         """
         pass
 
+# TODO: refine predicate pushdown rule to handle more cases like partial matches
 class PredicatePushdownRule(RewriteRule):
     def match(self, graph, node_id, context=None):
         """
@@ -115,3 +116,19 @@ class PredicatePushdownRule(RewriteRule):
 
         # print what nodes are affected
         print(f"[INFO] Predicate pushdown applied at node {node_id} to children: {children}")
+        
+# TODO: implement shared table rule
+class SharedTableRule(RewriteRule):
+    def match(self, graph, node_id, context = None):
+        pass
+    
+    def apply(self, graph, node_id, asts, context=None):
+        pass
+
+# TODO: implement common subexpression elimination rule
+class CommonSubExpElimRule(RewriteRule):
+    def match(self, graph, node_id, context = None):
+        pass
+    
+    def apply(self, graph, node_id, asts, context=None):
+        pass

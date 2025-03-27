@@ -1,6 +1,6 @@
 INSTALL tpch;
 LOAD tpch;
-CALL dbgen(sf = 1);
+CALL dbgen(sf = 10);
 
 CREATE SCHEMA tpch;
 
