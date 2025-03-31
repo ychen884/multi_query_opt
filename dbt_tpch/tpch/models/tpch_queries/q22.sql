@@ -1,3 +1,5 @@
+{{ config(materialized='table') }}
+
 SELECT
     cntrycode,
     count(*) AS numcust,

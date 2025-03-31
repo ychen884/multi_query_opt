@@ -12,7 +12,7 @@ SELECT
     avg(l_discount) AS avg_disc,
     count(*) AS count_order
 FROM
-    {{ source('tpch', 'lineitem') }}
+    {{ ref('predicate_push_down_parent') }}
 WHERE
     l_shipdate <= CAST('1998-09-02' AS date)
 GROUP BY

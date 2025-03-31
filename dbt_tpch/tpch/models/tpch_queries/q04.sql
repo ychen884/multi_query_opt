@@ -1,3 +1,5 @@
+{{ config(materialized='table') }}
+
 SELECT
     o_orderpriority,
     count(*) AS order_count

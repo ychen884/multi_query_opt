@@ -4,6 +4,12 @@ import networkx as nx
 import sqlglot
 from sqlglot import exp
 
+# tables materialized as output from sqls 
+materialized_table_list = []
+
+# topo sort order of sql files
+topo_sort_order = []
+
 def load_dbt_manifest(manifest_path):
     with open(manifest_path, "r") as f:
         return json.load(f)
@@ -76,6 +82,7 @@ def extract_nodes_with_materialized_table(manifest):
             if node_name:  # ensure the node has a name
                 result.add(node_name)
     return result
+
 def rewrite_ast_to_create_table(ast_obj, table_name, materialized_required_info):
     """
     Convert a SELECT-like AST into CREATE TABLE {table_name} AS (...) using sqlglot's expression classes.
@@ -87,15 +94,21 @@ def rewrite_ast_to_create_table(ast_obj, table_name, materialized_required_info)
     print("Materialized required info: ", materialized_required_info)
     # Table if in materialized required info
     # else is materialized view
+    
     # use "TABLE" as a replacement of materialized view for duckdb!
-    materialized_type = "TABLE" if table_name in materialized_required_info else "TABLE"
+    table_name_without_prefix = table_name.split(".")[2].replace('"', '')
+    print("Table name without prefix: ", table_name_without_prefix)
+    materialized_type = "TABLE" if table_name_without_prefix in materialized_required_info else "VIEW"
+    
+    if materialized_type == "TABLE":
+        materialized_table_list.append(table_name)
+
     # We'll build a new CREATE TABLE expression:
     create_expr = exp.Create(
         this=exp.Identifier(this=table_name),
         kind=materialized_type,
         expression=ast_obj,  # the parsed SELECT/CTE sub-tree
     )
-    # print("Create expr: ", create_expr.to_s())
     
     create_sql = create_expr.sql(dialect="duckdb")
     # remove unncessary ""xx""
@@ -159,6 +172,7 @@ def main():
                 node_data = manifest["nodes"][node_id]
                 dbt_relation_name = node_data.get("relation_name")
                 create_table_sql = rewrite_ast_to_create_table(ast, dbt_relation_name, materialized_required_info)
+                
                 print(f"Rewritten CREATE TABLE statement:\n{create_table_sql}\n")
                 
                 base_filename = os.path.basename(cpath)
@@ -167,9 +181,20 @@ def main():
                 with open(out_path, "w") as out_file:
                     out_file.write(create_table_sql)
                 print(f"[INFO] Wrote optimized SQL to: {out_path}\n")
+                relative_path = os.path.relpath(out_path, start=os.getcwd())
+                topo_sort_order.append(relative_path)
                 
             except Exception as e:
                 print(f"[WARN] Could not parse [{node_id}]: {e}")
+    
+    print("Log all materialized tables")
+    with open("materialized_tables.txt", "w") as f:
+        for item in materialized_table_list:
+            f.write("%s\n" % item)
 
+    print("Log topological sort order of SQL files")
+    with open("topo_sort_order.txt", "w") as f:
+        for sql_path in topo_sort_order:
+            f.write(sql_path + "\n")
 if __name__ == "__main__":
     main()

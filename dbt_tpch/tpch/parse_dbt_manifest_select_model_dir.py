@@ -7,6 +7,14 @@ from sqlglot import exp
 from rewriter import Rewriter
 from rewrite_rules import *
 from utils import *
+import argparse
+
+# tables materialized as output from sqls 
+materialized_table_list = []
+
+# topo sort order of sql files
+topo_sort_order = []
+
 
 # updated to not include source tables as nodes in graph
 def build_full_graph(manifest):
@@ -65,6 +73,7 @@ def extract_nodes_with_materialized_table(manifest):
             if node_name:  # ensure the node has a name
                 result.add(node_name)
     return result
+
 def rewrite_ast_to_create_table(ast_obj, table_name, materialized_required_info):
     """
     Convert a SELECT-like AST into CREATE TABLE {table_name} AS (...) using sqlglot's expression classes.
@@ -74,11 +83,10 @@ def rewrite_ast_to_create_table(ast_obj, table_name, materialized_required_info)
     # If it's e.g. DDL or multiple statements, you may need extra logic.
     print("Rewriting to add materialized table/view: ", table_name)
     print("Materialized required info: ", materialized_required_info)
-    # Table if in materialized required info
-    # else is materialized view
-    # use "TABLE" as a replacement of materialized view for duckdb!
-    materialized_type = "TABLE" if table_name in materialized_required_info else "TABLE"
-    # We'll build a new CREATE TABLE expression:
+    materialized_type = "TABLE" if table_name in materialized_required_info else "VIEW"
+    
+    if materialized_type == "TABLE":
+        materialized_table_list.append(table_name)
     create_expr = exp.Create(
         this=exp.Identifier(this=table_name),
         kind=materialized_type,
@@ -92,7 +100,7 @@ def rewrite_ast_to_create_table(ast_obj, table_name, materialized_required_info)
      
     return create_sql
 
-def main():
+def main(folder_name=None):
     # Path to the manifest
     manifest_path = os.path.join("target", "manifest.json")
     if not os.path.isfile(manifest_path):
@@ -108,10 +116,15 @@ def main():
     # Filter to only models in folder_name
     # (plus their upstream dependencies if any)
     # folder_name = "models/tpch_queries/"
-    folder_name = "models/MQO_1/"
-    print(full_graph.nodes)
-    subG = full_graph
-    subG = gather_subgraph(full_graph, manifest, folder_name)
+    # folder_name = "models/MQO_1/"
+
+    if folder_name:
+        print(f"[INFO] Using only folder: {folder_name}")
+        subG = gather_subgraph(full_graph, manifest, folder_name)
+    else:
+        print("[INFO] No folder specified; using entire graph.")
+        subG = full_graph
+
 
     # print nodes and edges
     print(f"Subgraph nodes ({len(subG.nodes)}):")
@@ -164,9 +177,23 @@ def main():
             with open(out_path, "w") as out_file:
                 out_file.write(create_table_sql)
             print(f"[INFO] Wrote optimized SQL to: {out_path}\n")
-            
+            relative_path = os.path.relpath(out_path, start=os.getcwd())
+            topo_sort_order.append(relative_path)
         except Exception as e:
             print(f"[WARN] Could not write parsed SQL for [{node_id}]: {e}")
 
+    with open("materialized_tables_optimized.txt", "w") as f:
+        for item in materialized_table_list:
+            f.write("%s\n" % item)
+    with open("topo_sort_order_optimized.txt", "w") as f:
+        for sql_path in topo_sort_order:
+            f.write(sql_path + "\n")
+
 if __name__ == "__main__":
-    main()
+    parser = argparse.ArgumentParser()
+    parser.add_argument(
+        "--folder",
+        help="Optimize only the partial model in the specified folder. If omitted, optimize everything."
+    )
+    args = parser.parse_args()
+    main(folder_name=args.folder)

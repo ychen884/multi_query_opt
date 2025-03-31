@@ -1,3 +1,5 @@
+{{ config(materialized='table') }}
+
 SELECT
     supp_nation,
     cust_nation,

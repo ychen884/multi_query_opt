@@ -1,3 +1,5 @@
+{{ config(materialized='table') }}
+
 SELECT
     nation,
     o_year,

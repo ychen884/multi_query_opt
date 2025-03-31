@@ -1,3 +1,5 @@
+{{ config(materialized='table') }}
+
 SELECT
     100.00 * sum(
         CASE WHEN p_type LIKE 'PROMO%' THEN

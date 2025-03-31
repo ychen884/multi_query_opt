@@ -1,3 +1,5 @@
+{{ config(materialized='table') }}
+
 SELECT
     ps_partkey,
     sum(ps_supplycost * ps_availqty) AS value

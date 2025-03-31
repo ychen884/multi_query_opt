@@ -1,3 +1,5 @@
+{{ config(materialized='table') }}
+
 SELECT
     sum(l_extendedprice) / 7.0 AS avg_yearly
 FROM

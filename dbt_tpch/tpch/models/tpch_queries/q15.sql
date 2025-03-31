@@ -1,3 +1,5 @@
+{{ config(materialized='table') }}
+
 WITH revenue AS (
     SELECT
         l_suppkey AS supplier_no,

@@ -1,3 +1,5 @@
+{{ config(materialized='table') }}
+
 SELECT
     c_count,
     count(*) AS custdist

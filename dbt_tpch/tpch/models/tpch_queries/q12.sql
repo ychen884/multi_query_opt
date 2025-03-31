@@ -1,3 +1,5 @@
+{{ config(materialized='table') }}
+
 SELECT
     l_shipmode,
     sum(

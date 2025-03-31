@@ -1,3 +1,5 @@
+{{ config(materialized='table') }}
+
 SELECT
     s_name,
     s_address

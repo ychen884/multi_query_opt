@@ -1,3 +1,5 @@
+{{ config(materialized='table') }}
+
 SELECT
     p_brand,
     p_type,
