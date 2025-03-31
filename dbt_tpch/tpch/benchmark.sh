@@ -52,4 +52,7 @@ python3 check_correctness.py not_optimized
 echo "[STEP 10] Compare results for correctness for optimized SQLs"
 python3 check_correctness.py optimized
 
-# echo "[INFO] Done."
+echp "[STEP 11] Compare performance for optimized SQLs"
+python3 compare_final_perf.py ./unoptimized_bench_mark_results.csv ./optimized_bench_mark_results.csv ./final_benchmark_results.csv
+
+echo "[INFO] Done."
