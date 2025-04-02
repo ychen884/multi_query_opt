@@ -1,4 +1,6 @@
-from rewrite_rules import RewriteRule
+from rules.rewrite_rules import RewriteRule
+from sqlglot import exp
+from utils import *
 
 # TODO: refine predicate pushdown rule to handle more cases like partial matches
 class PredicatePushdownRule(RewriteRule):

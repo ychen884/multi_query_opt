@@ -1,4 +1,4 @@
-from rewrite_rules import RewriteRule
+from rules.rewrite_rules import RewriteRule
 
 # TODO: implement common subexpression elimination rule
 class CommonSubExpElimRule(RewriteRule):

@@ -1,4 +1,4 @@
-from rewrite_rules import RewriteRule
+from rules.rewrite_rules import RewriteRule
 
 # TODO: implement shared table rule
 class SharedTableRule(RewriteRule):
