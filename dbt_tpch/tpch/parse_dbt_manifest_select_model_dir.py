@@ -5,7 +5,7 @@ import sqlglot
 from sqlglot import exp
 
 from rewriter import Rewriter
-from rewrite_rules import *
+from rules.rewrite_rules import *
 from utils import *
 import argparse
 
