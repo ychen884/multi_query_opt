@@ -11,3 +11,8 @@ not_optimized_results
 not_optimized_sql
 dev.duckdb
 expected_results
+backup/
+out
+optimized_bench_mark_results.csv
+final_benchmark_results.csv
+unoptimized_bench_mark_results.csv

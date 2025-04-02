@@ -8,9 +8,9 @@ SELECT
     sum(l_extendedprice * (1 - l_discount)) AS sum_disc_price,
     sum(l_extendedprice * (1 - l_discount) * (1 + l_tax)) AS sum_charge
 FROM
-    {{ ref('predicate_push_down_parent') }}
+    {{ ref('simple_predpd_parent') }}
 WHERE
-    l_shipdate <= CAST('1998-09-02' AS date)
+    l_commitdate <= CAST('1995-09-02' AS DATE)
 GROUP BY
     l_returnflag,
     l_linestatus

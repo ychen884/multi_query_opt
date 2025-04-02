@@ -64,6 +64,7 @@ class PredicatePushdownRule(RewriteRule):
         # Parse the common predicate with a dummy query
         try:
             dummy_sql = f"SELECT * FROM t WHERE {common_predicate_sql}"
+            # print(f"[INFO] Parsing dummy SQL for common predicate: {dummy_sql}")
             dummy_ast = sqlglot.parse_one(dummy_sql, read=REWRITER_DIALECT)
             common_predicate_expr = dummy_ast.find(exp.Where).this
             # common_predicate_expr = exp.Where(

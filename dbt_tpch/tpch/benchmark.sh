@@ -4,16 +4,7 @@
 # 4. compile sql without rules vs with our rules & execute them
 # 5. compare results for correctness
 
-rm -r ./expected_results
-rm -r ./optimized_results
-rm -r ./optimized_sql
-rm -r ./not_optimized_results
-rm -r ./not_optimized_sql
-rm ./benchmark_results.csv
-rm materialized_tables.txt
-rm materialized_tables_optimized.txt
-rm topo_sort_order.txt
-rm topo_sort_order_optimized.txt
+bash ./cleanup.sh
 
 dbt clean
 # rm -r ./optimized_sql_with_rules
@@ -40,19 +31,16 @@ python3 parse_dbt_manifest_select_model_dir.py
 echo "[STEP 7] Execute optimized SQLs & save performance results"
 python3 duckdb_sql_execution.py optimized
 
-echo "[STEP 7] Execute not optimized SQLs"
+echo "[STEP 7] Execu    te not optimized SQLs"
 python3 duckdb_sql_execution.py not_optimized
 
-echo "[STEP 8] Execute optimized SQLs"
-python3 python3 parse_dbt_manifest_select_model_dir.py
-
-echo "[STEP 9] Compare results for correctness for not optimized SQLs"
+echo "[STEP 8] Compare results for correctness for not optimized SQLs"
 python3 check_correctness.py not_optimized
 
-echo "[STEP 10] Compare results for correctness for optimized SQLs"
+echo "[STEP 9] Compare results for correctness for optimized SQLs"
 python3 check_correctness.py optimized
 
-echp "[STEP 11] Compare performance for optimized SQLs"
+echo "[STEP 10] Compare performance for optimized SQLs"
 python3 compare_final_perf.py ./unoptimized_bench_mark_results.csv ./optimized_bench_mark_results.csv ./final_benchmark_results.csv
 
 echo "[INFO] Done."

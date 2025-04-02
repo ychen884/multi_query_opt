@@ -7,7 +7,7 @@ def read_benchmark_csv(filepath):
     """
     Reads a CSV file with columns:
         TableName,TotalCreationTimeNs(10runs)
-    Returns a dict {table_name: time_ns}.
+    Returns a dict {table_name: time}.
     """
     data = {}
     with open(filepath, "r", newline="") as f:
@@ -49,7 +49,7 @@ def main():
         writer.writerow([
             "TableName",
             "UnoptimizedTimeNs",
-            "OptimizedTimeNs",
+            "OptimizedTimeMs",
             "AbsoluteNsDiff (Unopt-Opt)",
             "PercentImprovement"
         ])
@@ -59,7 +59,7 @@ def main():
             opt_time = opt_data.get(table_name)
 
             # If either is missing, store a placeholder
-            if unopt_time is None or opt_time is None:
+            if unopt_time is None or opt_time is None or unopt_time == -1 or opt_time == -1:
                 abs_diff = ""
                 pct_improv = ""
             else:

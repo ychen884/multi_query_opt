@@ -14,8 +14,8 @@ def execute_ddl_data_init(con, ddl_file_path):
         ddl_script = f.read()
     print("Init data from ddl file:" + ddl_file_path)
     con.execute(ddl_script)
-    
-    
+
+
 # run env
 def summarize_cpuinfo_linux():
     if not os.path.exists("/proc/cpuinfo"):
@@ -61,7 +61,68 @@ def summarize_cpuinfo_linux():
             summary += f"  - Physical ID {pid}, {cores_by_physid[pid]} cores\n"
 
     return "[INFO] CPU Summary: " + summary
+
+
+def run_explain_analyze_and_parse_time(db_path, sql):
+    """
+    Create a fresh connection, run EXPLAIN ANALYZE on the given SQL, parse the
+    reported total time from DuckDB output, and return it in nanoseconds.
+    Return -1 if we fail to parse the time.
+    """
+    # open new connection to avoid caching from previous run
+    con = duckdb.connect(db_path)
+    con.execute("SET threads = 1;")
+    # We wrap the original SQL with EXPLAIN ANALYZE
+    explain_query = f"EXPLAIN ANALYZE {sql}"
+    try:
+        rows = con.execute(explain_query).fetchall()
+        total_time_ms = -1
+        for row in rows:
+            for plan_line in row:
+                # print(plan_line)
+                plan_line_lower = plan_line.lower()
+                if "total time:" in plan_line_lower:
+                    # print("Parsed perf: ", plan_line_lower)
+                    right = plan_line_lower.split("total time:", 1)[1].strip()
+                    # right now is "0.0014s             ││..."
+                    # need to extract the number and unit
+                    # e.g. "0.0014s"
+                    # split by whitespace
+                    right = right.split()[0]
+                    print(f"[INFO] Parsed perf: {right}")
+                    val = ""
+                    unit = ""
+                    for c in right:
+                        if c.isdigit() or c == ".":
+                            val += c
+                        else:
+                            unit += c
+                    val = val.strip()
+                    unit = unit.strip()
+                    try:
+                        float_val = float(val)
+                        if unit.startswith("s"):
+                            total_time_ms = int(float_val * 1e3)
+                        elif unit.startswith("ms"):
+                            total_time_ms = int(float_val)
+                        else:
+                            print(f"[WARN] Unknown unit: {unit}")
+                            total_time_ms = -1
+                    except:
+                        pass
+
+                    return total_time_ms
+    except Exception as e:
+        print(f"[ERROR] EXPLAIN ANALYZE failed: {e}")
+        return -1
+    finally:
+        con.close()
+
+
 def main():
+
+    # set the number of executions
+    exec_ct = 5
     
     # expect a single argument: either "optimized" or "not_optimized"
     if len(sys.argv) < 2:
@@ -72,12 +133,13 @@ def main():
         print(f"[ERROR] Invalid argument: {mode}")
         print("Please pass either 'optimized' or 'not_optimized'.")
         sys.exit(1)
-    
+    skip_results = "--no-save-results" in sys.argv
     sql_dir = f"{mode}_sql"
     results_dir = f"{mode}_results"
     db_path = "dev.duckdb"
     ddl_script = "ddl.sql"
     machine_info = platform.uname()
+   
     print("[INFO] Machine info:")
     print(f"  System:    {machine_info.system} {machine_info.release}")
     print(f"  Machine:   {machine_info.machine}")
@@ -90,22 +152,20 @@ def main():
     print("")
     if os.path.exists("dev.duckdb"):
         print("Clearing previous database file for new performance evaluation")
-        
         os.remove("dev.duckdb")
-    
+
 
     con = duckdb.connect(db_path)
     execute_ddl_data_init(con, ddl_script)
+    con.close()
 
-    # Drop any existing q01..q22 tables (or views)
-    # drop_tables_q01_to_q22(con)
-    # drop_views_q01_to_q22(con)
     topo_sort_file = "topo_sort_order.txt"
     if(mode == "optimized"):
         topo_sort_file = "topo_sort_order_optimized.txt"
     materialized_tables_file = "materialized_tables.txt"
     if(mode == "optimized"):
         materialized_tables_file = "materialized_tables_optimized.txt"
+
     with open(topo_sort_file, "r") as f:
         sql_files = [line.strip() for line in f if line.strip()]
     with open(materialized_tables_file, "r") as f:
@@ -119,78 +179,97 @@ def main():
         with open(sql_file, "r") as f:
             sql_statements = f.read()
 
-        total_time_ns = 0
-        # run 10 times
-        for _ in range(10):
-            # drop the table (if it exists) before each run
+        total_time_ms = 0
+        for _ in range(exec_ct):
+            # new connection to avoid reuse caching 
+            tmp_con = duckdb.connect(db_path)
+            
             drop_stmt = f"DROP TABLE IF EXISTS {out_table}"
             try:
-                con.execute(drop_stmt)
+                tmp_con.execute(drop_stmt)
             except Exception as e:
                 print(f"[WARN] Error dropping table {out_table}: {e}")
+            finally:
+                tmp_con.close()
 
-            start_ns = time.time_ns()
-            try:
-                con.execute(sql_statements)
-            except Exception as e:
-                print(f"[ERROR executing {sql_file}]: {e}")
-            end_ns = time.time_ns()
+            # measure execution time with EXPLAIN ANALYZE
+            # note that the query presumably creates table {out_table}
+            query_time_ns = run_explain_analyze_and_parse_time(db_path, sql_statements)
 
-            total_time_ns += (end_ns - start_ns)
+            if query_time_ns < 0:
+                print(f"[ERROR] Failed to parse duckdb query profiling time for {sql_file}.")
+                fallback_con = duckdb.connect(db_path)
+                drop_stmt = f"DROP TABLE IF EXISTS {out_table}"
+                try:
+                    fallback_con.execute(drop_stmt)
+                except:
+                    pass
+                start_ns = time.time_ns()
+                try:
+                    fallback_con.execute(sql_statements)
+                except Exception as ex:
+                    print(f"[ERROR executing {sql_file} in fallback mode]: {ex}")
+                    # if still failed, simply set time as -1
+                    total_time_ms = -1
+                    break
+                end_ns = time.time_ns()
+                fallback_con.close()
 
+                query_time_ns = end_ns - start_ns
+
+            total_time_ms += query_time_ns
+
+        # make out table name more readable
+        tb_name = out_table.replace('"', '').split('.')[-1]
         # record the total creation time across 10 runs
-        creation_times.append((out_table, total_time_ns))
-    
+        creation_times.append((tb_name, total_time_ms))
+
     if mode == "optimized":
         creation_csv = "optimized_bench_mark_results.csv"
     else:
         creation_csv = "unoptimized_bench_mark_results.csv"
-    
+
     with open(creation_csv, "w", newline="") as csv_file:
         writer = csv.writer(csv_file)
-        writer.writerow(["TableName", "TotalCreationTimeNs(10runs)"])
+        writer.writerow(["TableName", "TotalCreationTimeMs(10runs)"])
         for table_name, total_ns in creation_times:
             writer.writerow([table_name, total_ns])
+    if not skip_results:
+        os.makedirs(results_dir, exist_ok=True)
 
-    os.makedirs(results_dir, exist_ok=True)
+        final_con = duckdb.connect(db_path)
+        with open(materialized_tables_file, "r") as f:
+            lines = f.readlines()
 
-    with open(materialized_tables_file, "r") as f:
-        lines = f.readlines()
+        for line in lines:
+            line = line.strip()
+            if not line:
+                continue
 
-    for line in lines:
-        line = line.strip()
-        if not line:
-            continue
+            # line example:  "dev"."main"."q06"
+            table_fqn = line
+            cleaned = table_fqn.replace('"', '')
+            final_name = cleaned.split('.')[-1]
+            out_filename = os.path.join(results_dir, f"{final_name}.result")
+            select_stmt = f"SELECT * FROM {table_fqn}"
 
-        # line example:  "dev"."main"."q06"
-        table_fqn = line
+            try:
+                print(f"[INFO] Querying {table_fqn} -> writing to {out_filename}")
+                results = final_con.execute(select_stmt).fetchall()
+                with open(out_filename, "w") as out_file:
+                    if results:
+                        for row in results:
+                            out_file.write(str(row) + "\n")
+                    else:
+                        out_file.write("[No rows returned]\n")
 
-        cleaned = table_fqn.replace('"', '')
-        final_name = cleaned.split('.')[-1]
+            except Exception as e:
+                print(f"[ERROR selecting from {table_fqn}]: {e}")
+                with open(out_filename, "w") as out_file:
+                    out_file.write(f"[ERROR selecting from {table_fqn}]: {e}")
 
-        out_filename = os.path.join(results_dir, f"{final_name}.result")
-        select_stmt = f"SELECT * FROM {table_fqn}"
+        final_con.close()
 
-        try:
-            print(f"[INFO] Querying {table_fqn} -> writing to {out_filename}")
-
-            # execute the statement and fetch results
-            results = con.execute(select_stmt).fetchall()
-
-            with open(out_filename, "w") as out_file:
-                if results:
-                    for row in results:
-                        out_file.write(str(row) + "\n")
-                else:
-                    out_file.write("[No rows returned]\n")
-
-        except Exception as e:
-            print(f"[ERROR selecting from {table_fqn}]: {e}")
-            with open(out_filename, "w") as out_file:
-                out_file.write(f"[ERROR selecting from {table_fqn}]: {e}")
-
-
-    con.close()
 
 if __name__ == "__main__":
     main()
