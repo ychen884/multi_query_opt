@@ -4,7 +4,7 @@ import sqlglot
 from sqlglot import exp
 import sqlglot.dialects
 from utils import *
-from rewrite_rules import RewriteRule
+from rules.rewrite_rules import RewriteRule
 
 class Rewriter: 
     def __init__(self, manifest, subG : nx.DiGraph, rules=None):
