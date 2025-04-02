@@ -1,0 +1,4 @@
+logs/
+optimized_sql/
+target/
+*.txt
