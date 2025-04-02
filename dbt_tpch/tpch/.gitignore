@@ -2,3 +2,12 @@ logs/
 optimized_sql/
 target/
 *.txt
+
+target/
+dbt_packages/
+logs/
+benchmark_results.csv
+not_optimized_results
+not_optimized_sql
+dev.duckdb
+expected_results

@@ -1,2 +1,4 @@
 __pycache__/
 *.duckdb
+.user.yml
+profiles.yml
