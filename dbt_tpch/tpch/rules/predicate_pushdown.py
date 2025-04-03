@@ -1,5 +1,6 @@
 import sqlglot.optimizer
 import sqlglot.optimizer.normalize
+import sqlglot.optimizer.simplify
 from rules.rewrite_rules import RewriteRule
 import sqlglot
 from sqlglot import exp, optimizer
@@ -14,6 +15,7 @@ class PredicatePushdownRule(RewriteRule):
         Returns (True, rule_context) if at least two children share the same predicate;
         otherwise returns (False, None).
         """
+        # print(f"[INFO] Matching PredicatePushdownRule at node {node_id}")
         if context is None:
             context = {}
         children = list(graph.successors(node_id))
@@ -36,22 +38,37 @@ class PredicatePushdownRule(RewriteRule):
             if not child_where:
                 # This child does not have a WHERE clause so rule does not match
                 return False, None
+            
+    
             # did not find a way to compare expressions directly, convert to SQL
-            predicate_sql = child_where.this.sql(dialect=REWRITER_DIALECT)
+            # predicate_sql = child_where.this.sql(dialect=REWRITER_DIALECT)
             # print(f"[INFO] child {child} Predicate SQL: {predicate_sql}")
-            child_where_norm = sqlglot.optimizer.normalize.normalize(child_where)
+            child_where_norm = sqlglot.optimizer.normalize.normalize(child_where, dnf=False)
+            # https://sqlglot.com/sqlglot/optimizer/simplify.html
+            # for example: uniq_sort(node, root) is used in simplfy to resolve A and B == B and A
+            # https://github.com/tobymao/sqlglot/blob/09882e32f057670a9cbd97c1e5cf1a00c774b5d2/sqlglot/optimizer/simplify.py#L105
+            child_where_norm = sqlglot.optimizer.simplify.simplify(child_where_norm)
             if common_predicate is None:
                 # common_predicate = predicate_sql
                 common_predicate = child_where_norm
                 matching_children.append(child)
             # elif predicate_sql == common_predicate:
             else:
-                if child_where_norm.eq(common_predicate):
+                if child_where_norm == common_predicate:
+                        
+                    # print(type(child_where_norm) is type(common_predicate) and child_where_norm.__hash__() == common_predicate.__hash__())
+                    # print(f"[INFO] Found matching predicates child_where_norm: {child_where_norm.sql(dialect=REWRITER_DIALECT)}")
+                    # print(f"common_predicate: {common_predicate.sql(dialect=REWRITER_DIALECT)}")
                     matching_children.append(child)
                 else:
+                    # else:
+                    #     print("~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~")
+                    #     print(diff(common_predicate, child_where_norm))
                     return False, None
 
         if len(matching_children) >= 2:
+            print(f"[INFO] Found common predicate '{common_predicate.sql(dialect=REWRITER_DIALECT)}' "
+                  f"shared by children of node {node_id}: {matching_children}")
             # Return a context dict containing the common predicate and affected children.
             return True, {"common_predicate": common_predicate, "children": matching_children}
         return False, None
