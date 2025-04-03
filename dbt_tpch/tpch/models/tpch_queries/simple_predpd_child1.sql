@@ -15,6 +15,7 @@ FROM
     {{ ref('simple_predpd_parent') }}
 WHERE
     l_commitdate <= CAST('1995-09-02' AS DATE)
+    AND l_shipdate >= CAST('1990-09-02' AS date)
 GROUP BY
     l_returnflag,
     l_linestatus

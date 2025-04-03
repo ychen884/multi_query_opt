@@ -1,5 +1,8 @@
+import sqlglot.optimizer
+import sqlglot.optimizer.normalize
 from rules.rewrite_rules import RewriteRule
-from sqlglot import exp
+import sqlglot
+from sqlglot import exp, optimizer
 from utils import *
 
 # TODO: refine predicate pushdown rule to handle more cases like partial matches
@@ -36,13 +39,17 @@ class PredicatePushdownRule(RewriteRule):
             # did not find a way to compare expressions directly, convert to SQL
             predicate_sql = child_where.this.sql(dialect=REWRITER_DIALECT)
             # print(f"[INFO] child {child} Predicate SQL: {predicate_sql}")
+            child_where_norm = sqlglot.optimizer.normalize.normalize(child_where)
             if common_predicate is None:
-                common_predicate = predicate_sql
+                # common_predicate = predicate_sql
+                common_predicate = child_where_norm
                 matching_children.append(child)
-            elif predicate_sql == common_predicate:
-                matching_children.append(child)
+            # elif predicate_sql == common_predicate:
             else:
-                return False, None
+                if child_where_norm.eq(common_predicate):
+                    matching_children.append(child)
+                else:
+                    return False, None
 
         if len(matching_children) >= 2:
             # Return a context dict containing the common predicate and affected children.
@@ -58,7 +65,8 @@ class PredicatePushdownRule(RewriteRule):
             print(f"[ERROR] Invalid context: {context}")
             return 
 
-        common_predicate_sql = context.get("common_predicate")
+        # common_predicate_sql = context.get("common_predicate")
+        common_predicate_sql = context.get("common_predicate").this.sql(dialect=REWRITER_DIALECT)
         children = context.get("children", [])
 
         # Parse the common predicate with a dummy query

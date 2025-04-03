@@ -122,7 +122,7 @@ def run_explain_analyze_and_parse_time(db_path, sql):
 def main():
 
     # set the number of executions
-    exec_ct = 5
+    exec_ct = 2
     
     # expect a single argument: either "optimized" or "not_optimized"
     if len(sys.argv) < 2:
