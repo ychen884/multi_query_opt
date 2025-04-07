@@ -167,6 +167,7 @@ def main(folder_name=None):
         try:
             ast = opt_subG_asts[node_id]
             # print(f"\n---\nParsed AST for [{node_id}]:\n{ast.to_s()}")
+            # TODO: find another way to store/get node data, since manifest is not updated if graph structure changes
             node_data = manifest["nodes"][node_id]
             dbt_relation_name = node_data.get("relation_name")
             create_table_sql = rewrite_ast_to_create_table(ast, dbt_relation_name, materialized_required_info)
