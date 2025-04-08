@@ -39,13 +39,35 @@ class CommonSubExpElimRule(RewriteRule):
 
         if context is None or not isinstance(context, dict):
             print(f"[ERROR] Invalid context: {context}")
-            return 
-
-        print(context["common_cte"])
+            return graph, asts
 
         # Create a new node
+        cte_id = 0
         for cte, nodes in context["common_cte"].items():
-            dummy_sql = cte.sql()
-            print(dummy_sql)
+            # Modify the graph
+            # Make sure the node name is unique
+            dummy_node_name = f"shared_cte_{cte_id}"
 
-        # Replace all occurrences of the CTE in the graph
+            graph.add_node(dummy_node_name)
+            for node in nodes:
+                graph.add_edge(node, dummy_node_name)
+
+            # Create a new AST for the shared CTE
+            asts[dummy_node_name] = cte.find(exp.Select).copy()
+
+            # Remove the CTE from the original node
+            # And replace the CTE reference with the new node
+            for node in nodes:
+                # Remove 
+                ast = asts[node]
+                with_expression = ast.find(exp.With)
+                for node_cte in with_expression:
+                    if cte == node_cte:
+                        node_cte.pop()
+
+                table_ref = ast.find_all(exp.Table)
+                for table in table_ref:
+                    if table == exp.Table(this=exp.Identifier(this=cte.alias)):
+                        table.this.replace(exp.Identifier(this=dummy_node_name))
+
+            cte_id += 1
