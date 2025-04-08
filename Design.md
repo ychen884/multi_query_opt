@@ -1,8 +1,6 @@
-# Component Name
+# Multi-Query Optimization Framework
 
 ## Overview
-
->What motivates this to be implemented? What will this component achieve? 
 
 ### Context
 dbt (Data Build Tool) is a widely used SQL-centric tool for data transformation. Given a set of SQL files as input, dbt compiles them into a Directed Acyclic Graph (DAG) by analyzing user-defined dependencies (for example, SQL file A might depend on the table produced by SQL file B). Then dbt executes each node in this DAG directly, producing materialized tables or views.
@@ -25,25 +23,33 @@ In this project, we have three milestone goals:
 #### 125% goal:
 - Explore and implement Physical query optimization (e.g. cache & reuse of intermediate “subresults”)
 
-## Scope
->Which parts of the system will this feature rely on or modify? Write down specifics so people involved can review the design doc
-
-## Glossary (Optional)
-
->If you are introducing new concepts or giving unintuitive names to components, write them down here.
-
 ## Architectural Design
->Explain the input and output of the component, describe interactions and breakdown the smaller components if any. Include diagrams if appropriate.
 
-#### Execution module
+![Optimizer Pipeline: DAG -> dbt compile -> SQLGlot parse to AST -> Logical Rewrite -> SQLGlot deparse to SQL -> execution in DuckDB](graphs\MQO_pipeline.png "Optimizer Pipeline")
+### Execution module
 - We decided to implement our own execution module, separate from dbt. This choice allows us to focus on DAG rewriting while having stronger control over execution and workload evaluation.
 
 1. Obtain a topological ordering of the DAG’s nodes (each node corresponds to a single SQL query). This order could be changed afte optimization because the DAG could get changed.
 2. Execute the queries in DuckDB in that topological order. Each query is typically doing a materialization for a table or view.
 3. The details of this module’s design and interaction with DuckDB are described in the Testing Plan section below.
 
+### Parser & Deparser
+We use SQLGlot for parsing dbt compiled SQL files into abstract syntax trees (ASTs), as well as backward conversion from ASTs to SQLs. Parsing the SQL queries into ASTs allows us to canonicalize and modify queries with guaranteed semantic correctness, which is ideal for the logical rewriter module. Note that in the actual implementation, a part of the parser is fused into the rewriter for easier AST manipulation. 
+
+### Logical Rewriter
+The rewriter contains the core logic for dbt DAG optimization, using a heuristics approach. It takes the DAG, its dbt manifest, and a mapping of query nodes to their ASTs (from the parser). Once initialized, rules can be attached to the rewriter such that they are checked and applied during rewrite in their append order. The DAG and AST mapping are modified in-place, and passed to the deparser once the rewrite process ends. 
+
+The rewriter is also extensible in a similar style as Calcite. New rules can be implemented via extending the `RewriteRule` class, which has 2 abstract methods: `match()` and `apply()`. 
+- `match()` check if the rule is applicable to the target DAG node given current context, and optionally returns a matched-rule context on success
+- `apply()` performs transformations as defined by the rule to the target DAG node, if `match()` succeeds and optionally feeds matched-rule context 
+
+This provides great flexiblility to the rule implementations, including potential structural changes to the DAG, and modification of DAG nodes outside of current scope, both of which can be useful for more complex and scenario-specific rules. 
+
 ## Design Rationale
->Explain the goals of this design and how the design achieves these goals. Present alternatives considered and document why they are not chosen.
+
+The primary goal of our design is to enable extensibility and be as modular as possible, whiling having maximum control over each stage of the pipeline. These are enabled in our optimizer framework via the completely standalone execution module and its submodules, where each block is assigned a logically self-contained functionality. Using this approach, new modules can be freely attached and old modules can be freely detached. It is also beneficial for debugging, since we are able to inspect each block separately. Rule-level extensibility is also achieved in the rewriter in Calcite style as explained earlier. 
+
+Some alternatives we considered include feeding the DAG back to dbt after optimization. This could not be done because `dbt compile` simply outputs the actual SQLs that would be executed in a `dbt run` without `CREATE` statement, and is solely for debug/analysis/inspection purposes. This means dbt does not provide an interface for either 'decompiling' an already compiled DAG, or running a compiled DAG directly, even if it were not optimized. That implies we either have to build our own execution framework, or have the optimizer modify dbt DAGs directly. The later is not achievable as well, given that no other existing tool is able to parse dbt DAGs, except for dbt itself. 
 
 ## Testing Plan
 We will measure both the correctness and the performance of the rewritten DAG compared to the original DAG.
@@ -64,8 +70,19 @@ To verify that our optimized SQL produces the same results:
 
 
 ## Trade-offs and Potential Problems
->Write down any conscious trade-off you made that can be problematic in the future, or any problems discovered during the design process that remain unaddressed (technical debts).
+
+### Rewriter
+The current implementation of the rewrite does not check for rules exhaustively in the graph. Each rule instance is check once for each DAG node in the DAG's topological sort order. This may overlook cases such as: 
+1. Rule is applicable to new node created by current rule
+2. Rule is applicable to parent once transformation is applied on child (e.g. predicate can be pushed down >1 layers)
+3. A previously checked rule is applicable to some node after current rule's transformations
 
 
 ## Future Work
->Write down future work to fix known problems or otherwise improve the component.
+### Rewriter
+From the heuristics perspective, there can always be more rules added to the rewriter. We can try to identify new rules that can may improve overall performance. 
+
+From the generic query optimization perspective, there can potentially be a cost-based optimization design. But since dbt DAGs are structured completely different from simply queries, it will require a more in-depth discussion. 
+
+### Physical optimizations
+We may look into some potential physical optimizations such as different caching techniques to further improve DAG executions. This might require looking into dbt internals and can take some effort. 
