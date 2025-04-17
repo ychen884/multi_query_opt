@@ -50,7 +50,7 @@ class CommonSubExpElimRule(RewriteRule):
 
             graph.add_node(dummy_node_name)
             for node in nodes:
-                graph.add_edge(node, dummy_node_name)
+                graph.add_edge(dummy_node_name, node)
 
             # Create a new AST for the shared CTE
             asts[dummy_node_name] = cte.find(exp.Select).copy()
@@ -64,6 +64,9 @@ class CommonSubExpElimRule(RewriteRule):
                 for node_cte in with_expression:
                     if cte == node_cte:
                         node_cte.pop()
+
+                if len(with_expression.args["expressions"]) == 0:
+                    with_expression.pop()
 
                 table_ref = ast.find_all(exp.Table)
                 for table in table_ref:
