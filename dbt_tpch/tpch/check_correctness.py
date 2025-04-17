@@ -19,6 +19,7 @@ def main():
     actual_dir = f"./{mode}_results"
 
     mismatch_queries = []
+    matched_when_unordered = []
 
     # 1) Read materialized_tables.txt
     materialized_tables_file = "materialized_tables.txt"
@@ -54,11 +55,18 @@ def main():
 
         if expected_lines != actual_lines:
             mismatch_queries.append(final_name)
+            expected_set = {ln.rstrip("\n\r") for ln in expected_lines}
+            actual_set   = {ln.rstrip("\n\r") for ln in actual_lines}
+
+            if expected_set == actual_set:
+                matched_when_unordered.append(final_name)
 
     if mismatch_queries:
         print("[MISMATCH] The following queries differ or have missing files:")
         for q in mismatch_queries:
             print(f"  - {q}")
+            if q in matched_when_unordered:
+                print(f"    (BUT matched when unordered)")
         print(f"{len(mismatch_queries)} queries mismatched.")
     else:
         print("[MATCH] Correctness check passed!")
