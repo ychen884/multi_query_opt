@@ -30,3 +30,14 @@ def is_in_folder(manifest, node_id, folder_name):
 def load_dbt_manifest(manifest_path):
     with open(manifest_path, "r") as f:
         return json.load(f)
+
+_MANIFEST = None
+def set_manifest(m):
+    """Store the manifest once so other modules can look up relation names."""
+    global _MANIFEST
+    _MANIFEST = m
+
+def relation_name(node_id: str) -> str | None:
+    if _MANIFEST and node_id in _MANIFEST["nodes"]:
+        return _MANIFEST["nodes"][node_id]["relation_name"]
+    return None
