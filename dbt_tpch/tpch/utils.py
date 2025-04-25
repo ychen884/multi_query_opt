@@ -4,9 +4,12 @@ import networkx as nx
 import sqlglot
 from sqlglot import exp
 
+#### Constants ####
 # Assume duckdb dialect for now, used both for input & output sql
 REWRITER_DIALECT = "duckdb"
+ENABLE_PARTIAL_MATCH = True
 
+#### Utils ####
 def get_compiled_path(manifest, node_id):
     if node_id not in manifest["nodes"]:
         # print manifest nodes dict
@@ -30,3 +33,15 @@ def is_in_folder(manifest, node_id, folder_name):
 def load_dbt_manifest(manifest_path):
     with open(manifest_path, "r") as f:
         return json.load(f)
+
+def filter_set_to_expr(filter_set : set[exp.Expression]) -> exp.Expression:
+    """
+    Convert a set of filters to an AND connected expression.
+    """
+    if len(filter_set) == 0:
+        return None
+    filters = list(filter_set)
+    expr = filters[0]
+    for filter in filters[1:]:
+        expr = exp.And(this=expr, expression=filter)
+    return expr
