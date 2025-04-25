@@ -5,11 +5,21 @@ import sqlglot.optimizer.simplify
 from rules.rewrite_rules import RewriteRule
 import sqlglot
 from sqlglot import exp, optimizer
-from utils import REWRITER_DIALECT, relation_name 
+from utils import *
 from selectivity import *
 
 # TODO: refine predicate pushdown rule to handle more cases like partial matches
 class PredicatePushdownRule(RewriteRule):
+    def _flatten_where_clause(self, child_where_norm : exp.Where):
+        """
+        Flatten a where clause's predicate expression of exp1 and exp2 and ... 
+        into a list of individual expressions.
+        """
+        result = set()
+        for expr in child_where_norm.iter_expressions():
+            result.update(set(expr.flatten(unnest=False)))
+        return result
+    
     def match(self, graph, node_id, context=None):
         """
         Check if downstream (child) nodes share an identical predicate in their WHERE clause.
@@ -51,21 +61,19 @@ class PredicatePushdownRule(RewriteRule):
             # for example: uniq_sort(node, root) is used in simplfy to resolve A and B == B and A
             # https://github.com/tobymao/sqlglot/blob/09882e32f057670a9cbd97c1e5cf1a00c774b5d2/sqlglot/optimizer/simplify.py#L105
             child_where_norm = sqlglot.optimizer.simplify.simplify(child_where_norm)
-            print(f"[INFO] Child {child} WHERE clause: {child_where_norm.sql(dialect=REWRITER_DIALECT)}")
+            # print(f"[INFO] Child {child} WHERE clause: {child_where_norm.sql(dialect=REWRITER_DIALECT)}")
             if ENABLE_PARTIAL_MATCH:
                 if common_predicate is None:
-                    common_predicate = set(child_where_norm.flatten(unnest=False))
+                    common_predicate = self._flatten_where_clause(child_where_norm)
                     
                     # map each filter to the children that it came from.
                     # although now all children are required to match, this can be useful
                     # in case we want partially match the children in the future
-                    # for filter in child_where_norm.iter_expressions():
-                    # for filter in child_where_norm.find_all(exp.Or):
                     for filter in common_predicate:         # non of these are as expected
-                        print(f"[INFO] Filter: {filter.sql(dialect=REWRITER_DIALECT)}")
+                        # print(f"[INFO] 1st Filter: {filter.sql(dialect=REWRITER_DIALECT)}")
                         filter_to_child_map[filter] = set([child])
                 else:
-                    child_predicates = set(child_where_norm.flatten(unnest=False))
+                    child_predicates = self._flatten_where_clause(child_where_norm)
                     common_predicate = common_predicate.intersection(child_predicates)
                     if len(common_predicate) == 0:
                         return False, None
@@ -92,6 +100,8 @@ class PredicatePushdownRule(RewriteRule):
                     matching_children_set = matching_children_set.union(filter_to_child_map[filter])
             matching_children = list(matching_children_set)
         if len(matching_children) >= 2:
+            for filter in common_predicate: 
+                print(f"[INFO] Final common predicate Filter: {filter.sql(dialect=REWRITER_DIALECT)}")
             # Return a context dict containing the common predicate and affected children.
             return True, {"common_predicate": common_predicate, "children": matching_children}
         return False, None
@@ -105,9 +115,18 @@ class PredicatePushdownRule(RewriteRule):
             print(f"[ERROR] Invalid context: {context}")
             return 
 
+        if ENABLE_PARTIAL_MATCH:
+            # this common_predicate is a set of predicate expressions
+            common_predicate = context["common_predicate"]
+            common_predicate_expr = filter_set_to_expr(common_predicate)
+            print(f"[INFO] Common predicate expression: {common_predicate_expr}")
+            common_predicate_sql = common_predicate_expr.sql(dialect=REWRITER_DIALECT)
+        else:
+            # this common_predicate is a complete where clause expression
+            common_predicate_sql = context["common_predicate"].this.sql(dialect=REWRITER_DIALECT)
+            common_predicate_expr = sqlglot.parse_one(common_predicate_sql, read=REWRITER_DIALECT).find(exp.Where).this
         
         # early-exit based on selectivity                               
-        common_predicate_sql = context["common_predicate"].this.sql(dialect=REWRITER_DIALECT)
         db_path = "dev.duckdb"
         con = duckdb.connect(db_path)
         
@@ -117,25 +136,9 @@ class PredicatePushdownRule(RewriteRule):
             print(f"[PredicatePushdownRule] Skip push-down(add intermediate node) on {node_id}: selectivity={sel:.2%} > "
                 f"{DEFAULT_THRESHOLD:.0%}")
             con.close()
-            return
+            # return
         con.close()
         
-        # common_predicate_sql = context.get("common_predicate")
-        if ENABLE_PARTIAL_MATCH:
-            # common_predicate is a set of expressions 
-            common_predicate_expr = filter_set_to_expr(context.get("common_predicate"))
-            common_predicate_sql = common_predicate_expr.sql(dialect=REWRITER_DIALECT)
-        else:
-            common_predicate_sql = context.get("common_predicate").this.sql(dialect=REWRITER_DIALECT)
-            # Parse the common predicate with a dummy query
-            try:
-                dummy_sql = f"SELECT * FROM t WHERE {common_predicate_sql}"
-                # print(f"[INFO] Parsing dummy SQL for common predicate: {dummy_sql}")
-                dummy_ast = sqlglot.parse_one(dummy_sql, read=REWRITER_DIALECT)
-                common_predicate_expr = dummy_ast.find(exp.Where).this
-            except Exception as e:
-                print(f"[ERROR] Failed to parse common predicate: {e}")
-                return 
         children = context.get("children", [])
         print(f"[INFO] Pushdown common predicate '{common_predicate_sql}' " + 
                 f"shared by children of node {node_id}: {children}")
@@ -146,6 +149,7 @@ class PredicatePushdownRule(RewriteRule):
         if current_where:
             # Combine with the existing predicate
             new_predicate = exp.And(this=current_where.this, expression=common_predicate_expr)
+            new_predicate = optimizer.simplify.simplify(new_predicate)
             current_where.set("this", new_predicate)
         else:
             new_where = exp.Where(this=common_predicate_expr)
@@ -157,11 +161,11 @@ class PredicatePushdownRule(RewriteRule):
                 if not child_ast: continue
                 child_where = child_ast.find(exp.Where)
                 if not child_where: continue
-                child_where_norm = sqlglot.optimizer.normalize.normalize(child_where, dnf=False)
-                child_where_norm = sqlglot.optimizer.simplify.simplify(child_where_norm).copy()
-                child_predicates = set(child_where_norm.flatten(unnest=False))
-                new_predicates = child_predicates - context.get("common_predicate")
-                new_where = filter_set_to_expr(new_predicates)
+                child_where_norm = optimizer.normalize.normalize(child_where, dnf=False)
+                child_where_norm = optimizer.simplify.simplify(child_where_norm).copy()
+                child_predicates = self._flatten_where_clause(child_where_norm)
+                new_predicates = child_predicates - common_predicate # set difference
+                new_where = exp.Where(this=filter_set_to_expr(new_predicates))
                 child_ast.args.pop("where", None)
                 child_ast.set("where", new_where)
         else:

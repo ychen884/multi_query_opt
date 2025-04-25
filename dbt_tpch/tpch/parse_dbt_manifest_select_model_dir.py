@@ -119,7 +119,7 @@ def main(folder_name=None):
     # Filter to only models in folder_name
     # (plus their upstream dependencies if any)
     # folder_name = "models/tpch_queries/"
-    # folder_name = "models/MQO_1/"
+    folder_name = "models/simple_multi_pd/"
 
     if folder_name:
         print(f"[INFO] Using only folder: {folder_name}")
