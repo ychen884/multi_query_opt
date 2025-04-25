@@ -45,3 +45,35 @@ def filter_set_to_expr(filter_set : set[exp.Expression]) -> exp.Expression:
     for filter in filters[1:]:
         expr = exp.And(this=expr, expression=filter)
     return expr
+_MANIFEST = None
+def set_manifest(m):
+    """Store the manifest once so other modules can look up relation names."""
+    global _MANIFEST
+    _MANIFEST = m
+
+def relation_name(node_id: str) -> str | None:
+    if _MANIFEST and node_id in _MANIFEST["nodes"]:
+        return _MANIFEST["nodes"][node_id]["relation_name"]
+    return None
+
+def filter_set_to_expr(filter_set : set[exp.Expression]) -> exp.Expression:
+    """
+    Convert a set of filters to an AND connected expression.
+    """
+    if len(filter_set) == 0:
+        return None
+    filters = list(filter_set)
+    expr = filters[0]
+    for filter in filters[1:]:
+        expr = exp.And(this=expr, expression=filter)
+    return expr
+_MANIFEST = None
+def set_manifest(m):
+    """Store the manifest once so other modules can look up relation names."""
+    global _MANIFEST
+    _MANIFEST = m
+
+def relation_name(node_id: str) -> str | None:
+    if _MANIFEST and node_id in _MANIFEST["nodes"]:
+        return _MANIFEST["nodes"][node_id]["relation_name"]
+    return None

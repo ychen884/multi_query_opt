@@ -48,9 +48,9 @@ def main():
         writer = csv.writer(f)
         writer.writerow([
             "TableName",
-            "UnoptimizedTimeNs",
+            "UnoptimizedTimeMs",
             "OptimizedTimeMs",
-            "AbsoluteNsDiff (Unopt-Opt)",
+            "AbsoluteMsDiff (Unopt-Opt)",
             "PercentImprovement"
         ])
         
