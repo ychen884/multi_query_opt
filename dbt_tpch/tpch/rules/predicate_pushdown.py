@@ -1,10 +1,12 @@
+import duckdb
 import sqlglot.optimizer
 import sqlglot.optimizer.normalize
 import sqlglot.optimizer.simplify
 from rules.rewrite_rules import RewriteRule
 import sqlglot
 from sqlglot import exp, optimizer
-from utils import *
+from utils import REWRITER_DIALECT, relation_name 
+from selectivity import *
 
 # TODO: refine predicate pushdown rule to handle more cases like partial matches
 class PredicatePushdownRule(RewriteRule):
@@ -82,6 +84,21 @@ class PredicatePushdownRule(RewriteRule):
             print(f"[ERROR] Invalid context: {context}")
             return 
 
+        
+        # early-exit based on selectivity                               
+        common_predicate_sql = context["common_predicate"].this.sql(dialect=REWRITER_DIALECT)
+        db_path = "dev.duckdb"
+        con = duckdb.connect(db_path)
+        
+        base_ast  = asts[node_id]
+        push, sel = should_pushdown_on_ast(con, base_ast, common_predicate_sql)
+        if not push:
+            print(f"[PredicatePushdownRule] Skip push-down(add intermediate node) on {node_id}: selectivity={sel:.2%} > "
+                f"{DEFAULT_THRESHOLD:.0%}")
+            con.close()
+            return
+        con.close()
+        
         # common_predicate_sql = context.get("common_predicate")
         common_predicate_sql = context.get("common_predicate").this.sql(dialect=REWRITER_DIALECT)
         children = context.get("children", [])

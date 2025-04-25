@@ -4,6 +4,7 @@ import networkx as nx
 import sqlglot
 from sqlglot import exp
 
+
 from rewriter import Rewriter
 from rules.predicate_pushdown import PredicatePushdownRule
 from rules.cse import CommonSubExpElimRule
@@ -111,7 +112,7 @@ def main(folder_name=None):
 
     # Load manifest
     manifest = load_dbt_manifest(manifest_path)
-
+    set_manifest(manifest)
     # Build the full graph
     full_graph = build_full_graph(manifest)
 
