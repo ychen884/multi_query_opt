@@ -1,1 +1,0 @@
-Stole from https://github.com/duckdb/duckdb/tree/main/extension/tpch/dbgen/queries
