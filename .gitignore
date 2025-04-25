@@ -2,3 +2,6 @@ __pycache__/
 *.duckdb
 .user.yml
 profiles.yml
+
+analytics-master.zip
+analytics-master/
