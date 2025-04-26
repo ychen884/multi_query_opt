@@ -40,7 +40,7 @@ class Rewriter:
                 # print(f"[WARN] File for node {node_id} not found or no compiled path.")
                 raise Exception(f"File for node {node_id} not found or no compiled path.")
         # Apply rules (in order)
-        # for now assume graph structure is not changed
+        # currently new nodes created in flight are not checked for matches
         # TODO: handle graph structure changes
         # TODO: handle multiple/dynamic matches (loop until no more matches?)
         for rule in self.rules:
@@ -53,4 +53,6 @@ class Rewriter:
                         print(f"[INFO] Rule {rule.__class__.__name__} matched! Rewrite based at node {node_id}")
                         # self.asts[node_id] = rule.apply(self.graph, node_id, self.asts, context)
                         rule.apply(self.graph, node_id, self.asts, context)
+                        print(f"[INFO] New graph in toposort order: {list(nx.topological_sort(self.graph))}")
+                        print(f"[INFO] New asts length: {len(self.asts)}")
                         print(f"[INFO] Base node rewritten SQL:\n{self.asts[node_id].sql(dialect=REWRITER_DIALECT)}")

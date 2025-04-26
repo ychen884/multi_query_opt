@@ -143,17 +143,39 @@ class PredicatePushdownRule(RewriteRule):
         print(f"[INFO] Pushdown common predicate '{common_predicate_sql}' " + 
                 f"shared by children of node {node_id}: {children}")
 
-        # add predicate to current node 
-        ast = asts.get(node_id)
-        current_where = ast.find(exp.Where)
-        if current_where:
-            # Combine with the existing predicate
-            new_predicate = exp.And(this=current_where.this, expression=common_predicate_expr)
-            new_predicate = optimizer.simplify.simplify(new_predicate)
-            current_where.set("this", new_predicate)
-        else:
-            new_where = exp.Where(this=common_predicate_expr)
-            ast.set("where", new_where)
+        # add predicate to new node (TODO: add to current node if ephmeral) 
+        # ast = asts.get(node_id)
+        # current_where = ast.find(exp.Where)
+        # if current_where:
+        #     # Combine with the existing predicate
+        #     new_predicate = exp.And(this=current_where.this, expression=common_predicate_expr)
+        #     new_predicate = optimizer.simplify.simplify(new_predicate)
+        #     current_where.set("this", new_predicate)
+        # else:
+        #     new_where = exp.Where(this=common_predicate_expr)
+        #     ast.set("where", new_where)
+        
+        # if not ephemeral, create new node and add to graph
+        node_name = node_id.split(".")[-1]
+        new_node_name = f"{node_name}_pushdown"
+        new_node_id = ".".join(node_id.split(".")[:-1] + [new_node_name])
+        # add new node to graph by:
+        # 1. edge from current node to new node
+        # 2. and edge from new node to all children
+        # 3. and remove previous edges from current node to children
+        graph.add_node(new_node_id)
+        for child in children:
+            graph.add_edge(new_node_id, child)
+            graph.remove_edge(node_id, child)
+        # create new node sql, from clause refers to parent node taken from first child
+        child_from = asts[children[0]].find(exp.From)
+        asts[new_node_id] = sqlglot.parse_one(
+            f"SELECT * FROM {child_from.this.sql(dialect=REWRITER_DIALECT)}", 
+            read=REWRITER_DIALECT
+        )
+        asts[new_node_id].set("where", exp.Where(this=common_predicate_expr))
+        # print new node sql
+        print(f"[INFO] New node SQL: {asts[new_node_id].sql(dialect=REWRITER_DIALECT)}")
 
         if ENABLE_PARTIAL_MATCH:
             for child in children:
@@ -179,6 +201,16 @@ class PredicatePushdownRule(RewriteRule):
                         common_predicate_sql:
                         child_ast.args.pop("where", None)
 
+        # update children from clause to use new node
+        new_node_relation_name = forge_relation_name(new_node_id)
+        print(f"[INFO] New node relation name: {new_node_relation_name}")
+        for child in children:
+            child_ast = asts.get(child)
+            if child_ast:
+                child_from = child_ast.find(exp.From)
+                if child_from:
+                    child_from.set("this", exp.Identifier(this=new_node_relation_name))
+        
         # print what nodes are affected
         print(f"[INFO] Predicate pushdown applied at node {node_id} to children: {children}")
         

@@ -181,13 +181,14 @@ def main(folder_name=None):
             if node_id not in manifest["nodes"]:
                 # If there is no node in the manifest, pick any node and get the database/schema name
                 # Then, use the node_id as the relation name
-                all_node_keys = list(manifest.get("nodes", {}).keys())
-                first_node_id = all_node_keys[0]
-                first_node_data = manifest["nodes"][first_node_id]
-                first_node_dbt_relation_name = first_node_data.get("relation_name")
-                dbt_relation_name_tokens = first_node_dbt_relation_name.split(".")
-                dbt_relation_name_tokens[-1] = '"' + node_id + '"'
-                dbt_relation_name = ".".join(dbt_relation_name_tokens)
+                # all_node_keys = list(manifest.get("nodes", {}).keys())
+                # first_node_id = all_node_keys[0]
+                # first_node_data = manifest["nodes"][first_node_id]
+                # first_node_dbt_relation_name = first_node_data.get("relation_name")
+                # dbt_relation_name_tokens = first_node_dbt_relation_name.split(".")
+                # dbt_relation_name_tokens[-1] = '"' + node_id + '"'
+                # dbt_relation_name = ".".join(dbt_relation_name_tokens)
+                dbt_relation_name = forge_relation_name(node_id)
                 # (Done) TODO: May need to materialize as a table
                 materialized_required_info.add(dbt_relation_name)
             else:
