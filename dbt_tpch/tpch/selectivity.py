@@ -18,7 +18,7 @@ from sqlglot import exp
 import sqlglot
 
 
-DEFAULT_THRESHOLD: float = 0.25  # 25 % rows kept – change to taste
+DEFAULT_THRESHOLD: float = 0.05
 
 __all__ = [
     "estimate_selectivity",  # table‑based
@@ -170,8 +170,10 @@ def should_pushdown_on_ast(
     conn: duckdb.DuckDBPyConnection,
     base_ast: exp.Expression,
     predicate_sql: str,
+    num_children: int,
     threshold: float = DEFAULT_THRESHOLD,
 ) -> Tuple[bool, float]:
     sel = estimate_selectivity_ast(conn, base_ast, predicate_sql)
     print(f"Selectivity: {sel:.2%} (threshold: {threshold:.2%})")
+    sel = sel / num_children
     return sel <= threshold, sel

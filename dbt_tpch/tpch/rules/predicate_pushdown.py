@@ -129,9 +129,12 @@ class PredicatePushdownRule(RewriteRule):
         # early-exit based on selectivity                               
         db_path = "dev.duckdb"
         con = duckdb.connect(db_path)
+        num_children = len(context.get("children", []))
         
         base_ast  = asts[node_id]
-        push, sel = should_pushdown_on_ast(con, base_ast, common_predicate_sql)
+        push, sel = should_pushdown_on_ast(con, base_ast, common_predicate_sql, num_children)
+        
+        
         if not push:
             print(f"[PredicatePushdownRule] Skip push-down(add intermediate node) on {node_id}: selectivity={sel:.2%} > "
                 f"{DEFAULT_THRESHOLD:.0%}")
@@ -141,7 +144,7 @@ class PredicatePushdownRule(RewriteRule):
         
         children = context.get("children", [])
         print(f"[INFO] Pushdown common predicate '{common_predicate_sql}' " + 
-                f"shared by children of node {node_id}: {children}")
+                f"shared by children of node {node_id}: {children}" + "selectivity={sel:.5%}")
 
         # add predicate to new node (TODO: add to current node if ephmeral) 
         # ast = asts.get(node_id)
