@@ -6,7 +6,8 @@ import time
 import csv
 import platform
 import sys
-
+from utils import *
+from utils import _NEW_NODE_REGISTRY
 
 # init database
 def execute_ddl_data_init(con, ddl_file_path):
@@ -63,14 +64,17 @@ def summarize_cpuinfo_linux():
     return "[INFO] CPU Summary: " + summary
 
 
-def run_explain_analyze_and_parse_time(db_path, sql):
+def run_explain_analyze_and_parse_time(db_path, sql, conn):
     """
     Create a fresh connection, run EXPLAIN ANALYZE on the given SQL, parse the
     reported total time from DuckDB output, and return it in nanoseconds.
     Return -1 if we fail to parse the time.
     """
     # open new connection to avoid caching from previous run
-    con = duckdb.connect(db_path)
+    if conn is None:
+        con = duckdb.connect(db_path)
+    else:
+        con = conn
     con.execute("SET threads = 1;")
     # We wrap the original SQL with EXPLAIN ANALYZE
     explain_query = f"EXPLAIN ANALYZE {sql}"
@@ -116,7 +120,8 @@ def run_explain_analyze_and_parse_time(db_path, sql):
         print(f"[ERROR] EXPLAIN ANALYZE failed: {e}")
         return -1
     finally:
-        con.close()
+        if conn is None:
+            con.close()
 
 
 def main():
@@ -172,7 +177,11 @@ def main():
         sql_out_tables = [line.strip() for line in f if line.strip()]
 
     creation_times = []
-
+    # if existing temporary tables, we should not create new connections
+    # manually toggle for now
+    reuse = True
+    shared_con = duckdb.connect(db_path)
+    
     for idx, sql_file in enumerate(sql_files):
         out_table = sql_out_tables[idx]
         print(f"[INFO] Preparing to run {sql_file} (output table: {out_table})")
@@ -182,19 +191,30 @@ def main():
         total_time_ms = 0
         for _ in range(exec_ct):
             # new connection to avoid reuse caching 
-            tmp_con = duckdb.connect(db_path)
-            
-            drop_stmt = f"DROP TABLE IF EXISTS {out_table}"
-            try:
-                tmp_con.execute(drop_stmt)
-            except Exception as e:
-                print(f"[WARN] Error dropping table {out_table}: {e}")
-            finally:
-                tmp_con.close()
+            if not reuse:
+                tmp_con = duckdb.connect(db_path)
+                
+                drop_stmt = f"DROP TABLE IF EXISTS {out_table}"
+                try:
+                    tmp_con.execute(drop_stmt)
+                except Exception as e:
+                    print(f"[WARN] Error dropping table {out_table}: {e}")
+                finally:
+                    tmp_con.close()
+            else:
+                drop_stmt = f"DROP TABLE IF EXISTS {out_table}"
+                try:
+                    shared_con.execute(drop_stmt)
+                except Exception as e:
+                    print(f"[WARN] Error dropping table {out_table}: {e}")
 
             # measure execution time with EXPLAIN ANALYZE
             # note that the query presumably creates table {out_table}
-            query_time_ns = run_explain_analyze_and_parse_time(db_path, sql_statements)
+            if reuse:
+                print(f"[INFO] Running {sql_file} with shared connection........")
+                query_time_ns = run_explain_analyze_and_parse_time(db_path, sql_statements, shared_con)
+            else:
+                query_time_ns = run_explain_analyze_and_parse_time(db_path, sql_statements, None)
 
             if query_time_ns < 0:
                 print(f"[ERROR] Failed to parse duckdb query profiling time for {sql_file}.")

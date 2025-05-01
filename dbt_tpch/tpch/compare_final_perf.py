@@ -43,6 +43,9 @@ def main():
     # Union of all table names
     all_tables = set(unopt_data.keys()) | set(opt_data.keys())
 
+    total_unopt_time = 0
+    total_opt_time = 0
+
     # Write merged results
     with open(output_csv, "w", newline="") as f:
         writer = csv.writer(f)
@@ -57,6 +60,12 @@ def main():
         for table_name in sorted(all_tables):
             unopt_time = unopt_data.get(table_name)
             opt_time = opt_data.get(table_name)
+
+            # Sum total times if available
+            if isinstance(unopt_time, int) and unopt_time != -1:
+                total_unopt_time += unopt_time
+            if isinstance(opt_time, int) and opt_time != -1:
+                total_opt_time += opt_time
 
             # If either is missing, store a placeholder
             if unopt_time is None or opt_time is None or unopt_time == -1 or opt_time == -1:
@@ -77,6 +86,16 @@ def main():
                 abs_diff,
                 pct_improv
             ])
+
+        # Write summary totals at bottom
+        writer.writerow([])
+        writer.writerow([
+            "TOTAL",
+            total_unopt_time,
+            total_opt_time,
+            total_unopt_time - total_opt_time,
+            f"{((total_unopt_time - total_opt_time) / total_unopt_time * 100):.2f}" if total_unopt_time != 0 else ""
+        ])
 
     print(f"[INFO] Merged results written to {output_csv}")
 

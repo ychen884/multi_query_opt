@@ -77,7 +77,7 @@ def extract_nodes_with_materialized_table(manifest):
                 result.add(node_name)
     return result
 
-def rewrite_ast_to_create_table(ast_obj, table_name, materialized_required_info):
+def rewrite_ast_to_create_table(ast_obj, table_name, materialized_required_info, node_id):
     """
     Convert a SELECT-like AST into CREATE TABLE {table_name} AS (...) using sqlglot's expression classes.
     """
@@ -88,7 +88,14 @@ def rewrite_ast_to_create_table(ast_obj, table_name, materialized_required_info)
     # print("Materialized required info: ", materialized_required_info)
     materialized_type = "TABLE" if table_name in materialized_required_info else "VIEW"
     
-    if materialized_type == "TABLE":
+    # if added intermediate node, try to use TEMPORARY TABLE
+    if get_new_node(node_id) is not None:
+        materialized_type = "TEMPORARY TABLE"
+        parts = table_name.split(".") 
+        if parts[0].strip('"') == "dev":
+            table_name = f'temp.main.{parts[-1]}'
+    
+    if materialized_type == "TABLE" or materialized_type == "TEMPORARY TABLE":
         materialized_table_list.append(table_name)
     create_expr = exp.Create(
         this=exp.Identifier(this=table_name),
@@ -118,8 +125,8 @@ def main(folder_name=None):
 
     # Filter to only models in folder_name
     # (plus their upstream dependencies if any)
-    # folder_name = "models/tpch_queries/"
-    folder_name = "models/simple_multi_pd/"
+    folder_name = "models/tpch_queries/"
+    # folder_name = "models/simple_multi_pd/"
 
     if folder_name:
         print(f"[INFO] Using only folder: {folder_name}")
@@ -197,7 +204,7 @@ def main(folder_name=None):
 
             print(f"@@@ dbt_relation_name: {dbt_relation_name}")
 
-            create_table_sql = rewrite_ast_to_create_table(ast, dbt_relation_name, materialized_required_info)
+            create_table_sql = rewrite_ast_to_create_table(ast, dbt_relation_name, materialized_required_info, node_id)
             print(f"@@@ Rewritten CREATE TABLE statement:\n{create_table_sql}\n")
             
             # base_filename = os.path.basename(cpath)

@@ -51,6 +51,7 @@ def set_manifest(m):
     global _MANIFEST
     _MANIFEST = m
 
+
 def relation_name(node_id: str) -> str | None:
     if _MANIFEST and node_id in _MANIFEST["nodes"]:
         return _MANIFEST["nodes"][node_id]["relation_name"]
@@ -65,3 +66,24 @@ def forge_relation_name(node_id: str) -> str:
     tokens = ["dev", "main", node_id.split(".")[-1]]
     # add double quotes around each token then join with "."
     return ".".join([f'"{token}"' for token in tokens])
+
+from dataclasses import dataclass, asdict
+from typing import List, Dict, Any
+
+@dataclass
+class NewNodeRecord:
+    node_id: str
+
+_NEW_NODE_REGISTRY: Dict[str, NewNodeRecord] = {}
+
+def register_new_node(record: NewNodeRecord) -> None:
+    _NEW_NODE_REGISTRY[record.node_id] = record
+
+def new_nodes() -> List[NewNodeRecord]:
+    return list(_NEW_NODE_REGISTRY.values())
+
+def get_new_node(node_id: str) -> NewNodeRecord | None:
+    return _NEW_NODE_REGISTRY.get(node_id)
+
+def clear_new_node_registry() -> None:
+    _NEW_NODE_REGISTRY.clear()
