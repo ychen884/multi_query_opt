@@ -53,8 +53,8 @@ def main():
             "TableName",
             "UnoptimizedTimeMs",
             "OptimizedTimeMs",
-            "AbsoluteMsDiff (Unopt-Opt)",
-            "PercentImprovement"
+            # "AbsoluteMsDiff (Unopt-Opt)",
+            "Speedup"
         ])
         
         for table_name in sorted(all_tables):
@@ -72,18 +72,22 @@ def main():
                 abs_diff = ""
                 pct_improv = ""
             else:
-                abs_diff = unopt_time - opt_time
-                # Avoid division by zero
-                if unopt_time == 0:
+                # abs_diff = unopt_time - opt_time
+                # # Avoid division by zero
+                # if unopt_time == 0:
+                #     pct_improv = ""
+                # else:
+                #     pct_improv = (abs_diff / unopt_time) * 100
+                if opt_time == 0:
                     pct_improv = ""
                 else:
-                    pct_improv = (abs_diff / unopt_time) * 100
+                    pct_improv = unopt_time / opt_time
 
             writer.writerow([
                 table_name,
                 unopt_time if unopt_time is not None else "MISSING",
                 opt_time if opt_time is not None else "MISSING",
-                abs_diff,
+                # abs_diff,
                 pct_improv
             ])
 

@@ -4,15 +4,14 @@ import networkx as nx
 import sqlglot
 from sqlglot import exp
 
+from utils import *
+import argparse
+
 # tables materialized as output from sqls 
 materialized_table_list = []
 
 # topo sort order of sql files
 topo_sort_order = []
-
-def load_dbt_manifest(manifest_path):
-    with open(manifest_path, "r") as f:
-        return json.load(f)
 
 def build_full_graph(manifest):
     """Build a full DAG of all models from the manifest."""
@@ -23,20 +22,6 @@ def build_full_graph(manifest):
             for dep_id in node_data["depends_on"]["nodes"]:
                 G.add_edge(dep_id, node_id)
     return G
-
-def get_compiled_path(manifest, node_id):
-    node_data = manifest["nodes"][node_id]
-    return node_data.get("compiled_path")
-
-def is_in_folder(manifest, node_id, folder_name):
-    """
-    Check if the compiled SQL path includes 'folder_name', e.g. "models/MQO_1".
-    Adjust logic if your path check is different.
-    """
-    cpath = get_compiled_path(manifest, node_id)
-    if cpath and folder_name in cpath:
-        return True
-    return False
 
 def gather_subgraph(graph, manifest, folder_name):
     """
@@ -61,6 +46,7 @@ def gather_subgraph(graph, manifest, folder_name):
     # 3) Now 'all_needed' is the set of nodes we want. Build the subgraph.
     subG = graph.subgraph(all_needed).copy()
     return subG
+
 def extract_nodes_with_materialized_table(manifest):
     """
     Extracts the names of nodes from a manifest dictionary where the node's config
@@ -116,7 +102,7 @@ def rewrite_ast_to_create_table(ast_obj, table_name, materialized_required_info)
      
     return create_sql
 
-def main():
+def main(folder_name=None):
     # Path to the manifest
     manifest_path = os.path.join("target", "manifest.json")
     if not os.path.isfile(manifest_path):
@@ -131,10 +117,17 @@ def main():
 
     # Filter to only models in "models/MQO_1/"
     # (plus their upstream dependencies if any)
-    folder_name = "models/tpch_queries/"
-    print(full_graph.nodes)
-    subG = full_graph
+    # folder_name = "models/tpch_queries/"
+    # print(full_graph.nodes)
+    # subG = full_graph
     # subG = gather_subgraph(full_graph, manifest, folder_name)
+
+    if folder_name:
+        print(f"[INFO] Using only folder: {folder_name}")
+        subG = gather_subgraph(full_graph, manifest, folder_name)
+    else:
+        print("[INFO] No folder specified; using entire graph.")
+        subG = full_graph
 
     # print nodes and edges
     print(f"Subgraph nodes ({len(subG.nodes)}):")
@@ -196,5 +189,12 @@ def main():
     with open("topo_sort_order.txt", "w") as f:
         for sql_path in topo_sort_order:
             f.write(sql_path + "\n")
+
 if __name__ == "__main__":
-    main()
+    parser = argparse.ArgumentParser()
+    parser.add_argument(
+        "--folder",
+        help="Optimize only the partial model in the specified folder. If omitted, optimize everything."
+    )
+    args = parser.parse_args()
+    main(folder_name=args.folder)

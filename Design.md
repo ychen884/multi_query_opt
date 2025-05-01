@@ -13,19 +13,21 @@ Our main goal is to explore ways of rewriting the DAG (i.e., the compiled SQL qu
 In this project, we have three milestone goals:
 
 #### 75% goal: 
-- Generate a workload for benchmarking dbt’s DAGs
-- Implement a DAG rewriter with at least the predicate pushdown heuristic
+- Generate a workload for benchmarking dbt’s DAGs ✅
+- Implement a DAG rewriter with at least the predicate pushdown heuristic ✅
 
 #### 100% goal:
-- Implement all the proposed logical query optimizations for multiple queries
-- Evaluate the DAG using the benchmark
+- Implement all the proposed logical query optimizations for multiple queries 🆗
+- Evaluate the DAG using the benchmark ✅
 
 #### 125% goal:
-- Explore and implement Physical query optimization (e.g. cache & reuse of intermediate “subresults”)
+- Explore and implement Physical query optimization (e.g. cache & reuse of intermediate “subresults”) ❌
+- (Revised) Inject statistics from DBMS ✅
 
 ## Architectural Design
 
-![Optimizer Pipeline: DAG -> dbt compile -> SQLGlot parse to AST -> Logical Rewrite -> SQLGlot deparse to SQL -> execution in DuckDB](graphs\MQO_pipeline.png "Optimizer Pipeline")
+![Optimizer Pipeline: DAG -> dbt compile -> SQLGlot parse to AST -> Logical Rewrite -> SQLGlot deparse to SQL -> execution in DuckDB](graphs/MQO_pipeline.png "Optimizer Pipeline")
+
 ### Execution module
 - We decided to implement our own execution module, separate from dbt. This choice allows us to focus on DAG rewriting while having stronger control over execution and workload evaluation.
 
@@ -45,6 +47,13 @@ The rewriter is also extensible in a similar style as Calcite. New rules can be 
 
 This provides great flexiblility to the rule implementations, including potential structural changes to the DAG, and modification of DAG nodes outside of current scope, both of which can be useful for more complex and scenario-specific rules. 
 
+#### Statistics Injection
+Since some of the optimizations may not worth to do, the rewriter may extract statistics from the DBMS and use them to determine whether it should apply the optimizations or not. 
+
+In this project, we use statistics to choose whether we should do predicate pushdown since a predicate pushdown may generate more intermediate data. More specifically, we extract cardinality estimated by the DBMS and compute selectivity based on the estimation. Currently, we use a simple heuristic that if the selectivity is greater than a certain threshold (configurable), we will apply the rule.
+
+Note that this feature is experimental; there are many things that can be explored.
+
 ## Design Rationale
 
 The primary goal of our design is to enable extensibility and be as modular as possible, whiling having maximum control over each stage of the pipeline. These are enabled in our optimizer framework via the completely standalone execution module and its submodules, where each block is assigned a logically self-contained functionality. Using this approach, new modules can be freely attached and old modules can be freely detached. It is also beneficial for debugging, since we are able to inspect each block separately. Rule-level extensibility is also achieved in the rewriter in Calcite style as explained earlier. 
@@ -54,7 +63,7 @@ Some alternatives we considered include feeding the DAG back to dbt after optimi
 ## Testing Plan
 We will measure both the correctness and the performance of the rewritten DAG compared to the original DAG.
 
-Because there are few open-source DAG benchmark workloads, we plan to create our own, inspired by TPC-H. We will load TPC-H tables as the underlying raw data, then build data-model queries from the standard TPC-H queries. For each of our rewrite rules, we will construct DAGs that can benefit from that rule, thereby demonstrating the resulting performance improvement.
+Because there are few open-source DAG benchmark workloads, we plan to create our own, inspired by TPC-H. We will load TPC-H tables as the underlying raw data, then build data-model queries from the standard TPC-H queries. For each of our rewrite rules, we will construct DAGs that can benefit from that rule, thereby demonstrating the resulting performance improvement. We also use the limited set of open-source DAG workloads (e.g., dbt-dummy, jaffle-shop) to demonstrate the real-world impact.
 
 ### Correctness check
 To verify that our optimized SQL produces the same results:
@@ -62,12 +71,10 @@ To verify that our optimized SQL produces the same results:
 2. We apply our optimizations to rewrite the DAG.  
 3. We execute the optimized DAG and compare the final materialized tables/views with the original outputs (by running a separate query to fetch all rows).
 
-
 ### Performance evaluation and benchmark
 1. We rely on DuckDB’s internal profiling command `EXPLAIN ANALYZE` for multiple runs. Each run uses a cold cache (i.e., a fresh session) to ensure consistent timing. After these runs, we collected and compared the execution time (sum, avg, tail, etcs). 
 2. We found that DuckDB may automatically scale different numbers of threads based on running environment. To prevent inconsistent results due to concurrency, we set a fixed number of threads (currently 1) for every run.
 3. For each rewrite rule we develop, we would create a specialized set of DAGs that could benefit from that rule.
-
 
 ## Trade-offs and Potential Problems
 
@@ -77,12 +84,14 @@ The current implementation of the rewrite does not check for rules exhaustively 
 2. Rule is applicable to parent once transformation is applied on child (e.g. predicate can be pushed down >1 layers)
 3. A previously checked rule is applicable to some node after current rule's transformations
 
-
 ## Future Work
 ### Rewriter
-From the heuristics perspective, there can always be more rules added to the rewriter. We can try to identify new rules that can may improve overall performance. 
+From the heuristics perspective, there can always be more rules added to the rewriter. We can try to identify new rules that can may improve overall performance.
 
-From the generic query optimization perspective, there can potentially be a cost-based optimization design. But since dbt DAGs are structured completely different from simply queries, it will require a more in-depth discussion. 
+From the generic query optimization perspective, there can potentially be a cost-based optimization design. We have introduced a proof-of-concept for using statistics to selectively choose to apply the heuristics; this could be the first step towards the cost-based optimization. However, since dbt DAGs are structured completely different from simply queries, it will require a more in-depth discussion.
 
 ### Physical optimizations
 We may look into some potential physical optimizations such as different caching techniques to further improve DAG executions. This might require looking into dbt internals and can take some effort. 
+
+### Real-world evaluation
+It is important to see whether this is useful in the real-world dbt or not. It would be nice to have a lot of badly-written real-world DAG workloads to evaluate the usefulness.

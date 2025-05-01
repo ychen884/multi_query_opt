@@ -68,9 +68,16 @@ class CommonSubExpElimRule(RewriteRule):
                 if len(with_expression.args["expressions"]) == 0:
                     with_expression.pop()
 
-                table_ref = ast.find_all(exp.Table)
-                for table in table_ref:
-                    if table == exp.Table(this=exp.Identifier(this=cte.alias)):
-                        table.this.replace(exp.Identifier(this=dummy_node_name))
+                identifiers = ast.find_all(exp.Identifier)
+                for id in identifiers:
+                    if id.this == cte.alias:
+                        print(f"[INFO] Replacing {cte} with {dummy_node_name} in {node}")
+                        id.replace(exp.Identifier(this=dummy_node_name))
+                
+                # table_ref = ast.find_all(exp.Table)
+                # for table in table_ref:
+                #     if table.this.this == cte.alias:
+                #         print(f"[INFO] Replacing {cte} with {dummy_node_name} in {node}")
+                #         table.this.replace(exp.Identifier(this=dummy_node_name))
 
             cte_id += 1
