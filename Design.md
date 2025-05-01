@@ -26,7 +26,7 @@ In this project, we have three milestone goals:
 
 ## Architectural Design
 
-![Optimizer Pipeline: DAG -> dbt compile -> SQLGlot parse to AST -> Logical Rewrite -> SQLGlot deparse to SQL -> execution in DuckDB](graphs\MQO_pipeline.png "Optimizer Pipeline")
+![Optimizer Pipeline: DAG -> dbt compile -> SQLGlot parse to AST -> Logical Rewrite -> SQLGlot deparse to SQL -> execution in DuckDB](graphs/MQO_pipeline.png "Optimizer Pipeline")
 
 ### Execution module
 - We decided to implement our own execution module, separate from dbt. This choice allows us to focus on DAG rewriting while having stronger control over execution and workload evaluation.
