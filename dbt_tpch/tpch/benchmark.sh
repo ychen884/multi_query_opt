@@ -9,6 +9,7 @@ workload=$1
 bash ./cleanup.sh
 
 dbt clean
+dbt deps
 # rm -r ./optimized_sql_with_rules
 
 echo "[STEP 1] Removing old dev.duckdb (if any)"
@@ -33,16 +34,16 @@ python3 parse_dbt_manifest_select_model_dir.py --folder models/$workload
 echo "[STEP 7] Execute optimized SQLs & save performance results"
 python3 duckdb_sql_execution.py optimized
 
-echo "[STEP 7] Execute not optimized SQLs"
+echo "[STEP 8] Execute not optimized SQLs"
 python3 duckdb_sql_execution.py not_optimized
 
-echo "[STEP 8] Compare results for correctness for not optimized SQLs"
+echo "[STEP 9] Compare results for correctness for not optimized SQLs"
 python3 check_correctness.py not_optimized
 
-echo "[STEP 9] Compare results for correctness for optimized SQLs"
+echo "[STEP 10] Compare results for correctness for optimized SQLs"
 python3 check_correctness.py optimized
 
-echo "[STEP 10] Compare performance for optimized SQLs"
+echo "[STEP 11] Compare performance for optimized SQLs"
 python3 compare_final_perf.py ./unoptimized_bench_mark_results.csv ./optimized_bench_mark_results.csv ./final_benchmark_results.csv
 
 echo "[INFO] Done."
