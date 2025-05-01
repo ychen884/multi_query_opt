@@ -16,7 +16,9 @@ def get_compiled_path(manifest, node_id):
         print(f"Manifest nodes:")
         for node_id, node_data in manifest["nodes"].items():
             print(f"  {node_id}: {node_data.get('name')}")
-        raise Exception(f"Node {node_id} not found in manifest.")
+        # raise Exception(f"Node {node_id} not found in manifest.")
+        print(f"[WARN] Node {node_id} not found in manifest.")
+        return None
     node_data = manifest["nodes"][node_id]
     return node_data.get("compiled_path")
 
@@ -26,6 +28,7 @@ def is_in_folder(manifest, node_id, folder_name):
     Adjust logic if your path check is different.
     """
     cpath = get_compiled_path(manifest, node_id)
+    # print(f"Checking if {node_id} is in folder {folder_name}: {cpath}")
     if cpath and folder_name in cpath:
         return True
     return False

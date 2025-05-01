@@ -4,6 +4,8 @@
 # 4. compile sql without rules vs with our rules & execute them
 # 5. compare results for correctness
 
+workload=$1
+
 bash ./cleanup.sh
 
 dbt clean
@@ -16,8 +18,8 @@ echo "[STEP 2] Creating fresh dev.duckdb from ddl.sql"
 duckdb dev.duckdb < ddl.sql
 
 echo "[STEP 3] Compile SQL without rules"
-dbt compile --model workload_cte
-python3 generate_basic_sqls_wo_optimization.py --folder models/workload_cte
+dbt compile --model $workload
+python3 generate_basic_sqls_wo_optimization.py --folder models/$workload
 
 echo "[STEP 4] Running dbt"
 dbt run
@@ -26,7 +28,7 @@ echo "[STEP 5] Save dbt run results by querying the table/view"
 python3 dbt_run_results_query.py
 
 echo "[STEP 6] Optimize SQL with our rules"
-python3 parse_dbt_manifest_select_model_dir.py --folder models/workload_cte
+python3 parse_dbt_manifest_select_model_dir.py --folder models/$workload
 
 echo "[STEP 7] Execute optimized SQLs & save performance results"
 python3 duckdb_sql_execution.py optimized
