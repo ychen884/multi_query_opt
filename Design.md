@@ -47,7 +47,7 @@ The rewriter is also extensible in a similar style as Calcite. New rules can be 
 
 This provides great flexiblility to the rule implementations, including potential structural changes to the DAG, and modification of DAG nodes outside of current scope, both of which can be useful for more complex and scenario-specific rules. 
 
-### Statistics Injection
+#### Statistics Injection
 Since some of the optimizations may not worth to do, the rewriter may extract statistics from the DBMS and use them to determine whether it should apply the optimizations or not. 
 
 In this project, we use statistics to choose whether we should do predicate pushdown since a predicate pushdown may generate more intermediate data. More specifically, we extract cardinality estimated by the DBMS and compute selectivity based on the estimation. Currently, we use a simple heuristic that if the selectivity is greater than a certain threshold (configurable), we will apply the rule.
