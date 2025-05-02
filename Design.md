@@ -47,6 +47,14 @@ The rewriter is also extensible in a similar style as Calcite. New rules can be 
 
 This provides great flexiblility to the rule implementations, including potential structural changes to the DAG, and modification of DAG nodes outside of current scope, both of which can be useful for more complex and scenario-specific rules. 
 
+After the logical rewrite completes, the module emits a dependency-respecting order for the nodes, and the execution engine processes them in that exact sequence.
+
+#### Implemented Rules
+1. Predicate Pushdown: We apply semantics-aware, partial predicate propagation. If a parent node’s predicates cannot be pushed all the way to its children, we materialize a temporary table in DuckDB to capture the partially-filtered result. Whether this extra node is worth creating is heuristically decided from the predicate’s selectivity ratio and the parent’s fan-out (number of children), which is used to approximate the expected cost reduction. The execution layer keeps a single session open so these temporary tables remain visible through the entire run.
+2. Project Pushdown:  A lightweight implementation that suffices for our synthetic workloads. A production-grade version may utilize catalog metadata to handle complicated queries (lots of alias, CTEs and subqueries) more robustly.
+3. Common CTE Elimination: Identifies duplicated CTEs and materializes them once as a shared intermediate node, so downstream queries reference the same result. Because this rule is currently cost-agnostic, it may introduce overhead on real-world DAGs.
+
+
 #### Statistics Injection
 Since some of the optimizations may not worth to do, the rewriter may extract statistics from the DBMS and use them to determine whether it should apply the optimizations or not. 
 
@@ -90,8 +98,13 @@ From the heuristics perspective, there can always be more rules added to the rew
 
 From the generic query optimization perspective, there can potentially be a cost-based optimization design. We have introduced a proof-of-concept for using statistics to selectively choose to apply the heuristics; this could be the first step towards the cost-based optimization. However, since dbt DAGs are structured completely different from simply queries, it will require a more in-depth discussion.
 
+It would be interesting to do demand-driven push down with lazy transformation for parent node. If a parent node’s output is never referenced by the user, the optimizer can (a) skip materializing the original table altogether or (b) do the pushdown optimizations directly. This “lazy” approach avoids paying the I/O cost of materialization unless it is strictly necessary.
+
+To validate the optimizer at scale, we will (a) synthesize deeper and wider DAGs, and (b) collect production dbt workloads. These real-world workloads will help us uncover additional optimization opportunities (or hidden pitfalls) that small synthetic DAGs do not reveal.
+
 ### Physical optimizations
 We may look into some potential physical optimizations such as different caching techniques to further improve DAG executions. This might require looking into dbt internals and can take some effort. 
 
 ### Real-world evaluation
 It is important to see whether this is useful in the real-world dbt or not. It would be nice to have a lot of badly-written real-world DAG workloads to evaluate the usefulness.
+
