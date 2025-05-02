@@ -129,19 +129,22 @@ class PredicatePushdownRule(RewriteRule):
         # early-exit based on selectivity                               
         db_path = "dev.duckdb"
         con = duckdb.connect(db_path)
+        num_children = len(context.get("children", []))
         
         base_ast  = asts[node_id]
-        push, sel = should_pushdown_on_ast(con, base_ast, common_predicate_sql)
+        push, sel = should_pushdown_on_ast(con, base_ast, common_predicate_sql, num_children)
+        
+        
         if not push:
             print(f"[PredicatePushdownRule] Skip push-down(add intermediate node) on {node_id}: selectivity={sel:.2%} > "
                 f"{DEFAULT_THRESHOLD:.0%}")
             con.close()
-            # return
+            return
         con.close()
         
         children = context.get("children", [])
         print(f"[INFO] Pushdown common predicate '{common_predicate_sql}' " + 
-                f"shared by children of node {node_id}: {children}")
+                f"shared by children of node {node_id}: {children}" + "selectivity={sel:.5%}")
 
         # add predicate to new node (TODO: add to current node if ephmeral) 
         # ast = asts.get(node_id)
@@ -176,7 +179,21 @@ class PredicatePushdownRule(RewriteRule):
         asts[new_node_id].set("where", exp.Where(this=common_predicate_expr))
         # print new node sql
         print(f"[INFO] New node SQL: {asts[new_node_id].sql(dialect=REWRITER_DIALECT)}")
-
+        # record intermediate node id
+        record = NewNodeRecord(
+            node_id=new_node_id)
+        register_new_node(record)
+        print(f"[INFO] Registered new node: {record}")
+        
+        # update children from clause to use new node
+        new_node_relation_name = forge_relation_name(new_node_id)
+        
+        # patch: 
+        parts = new_node_relation_name.split(".")
+        if parts[0].strip('"') == "dev":
+            new_node_relation_name = f'temp.main.{parts[-1]}' 
+        print(f"[INFO] New node relation name: {new_node_relation_name}")
+        
         if ENABLE_PARTIAL_MATCH:
             for child in children:
                 child_ast = asts.get(child)
@@ -189,7 +206,10 @@ class PredicatePushdownRule(RewriteRule):
                 new_predicates = child_predicates - common_predicate # set difference
                 new_where = exp.Where(this=filter_set_to_expr(new_predicates))
                 child_ast.args.pop("where", None)
-                child_ast.set("where", new_where)
+                # child_ast.set("where", new_where)
+                if new_predicates:                     # only re-insert if non-empty
+                    new_where = exp.Where(this=filter_set_to_expr(new_predicates))
+                    child_ast.set("where", new_where)
         else:
             # For each child remove its whole WHERE clause for now
             for child in children:
@@ -201,9 +221,7 @@ class PredicatePushdownRule(RewriteRule):
                         common_predicate_sql:
                         child_ast.args.pop("where", None)
 
-        # update children from clause to use new node
-        new_node_relation_name = forge_relation_name(new_node_id)
-        print(f"[INFO] New node relation name: {new_node_relation_name}")
+
         for child in children:
             child_ast = asts.get(child)
             if child_ast:
