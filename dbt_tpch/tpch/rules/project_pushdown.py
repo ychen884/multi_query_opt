@@ -23,6 +23,9 @@ class ProjectionPushdownRule(RewriteRule):
         }
 
         required = set()
+
+        # print(repr(child_ast))
+
         for col in child_ast.find_all(exp.Column):
             col_sql = col.sql(dialect=REWRITER_DIALECT)
 
@@ -32,9 +35,6 @@ class ProjectionPushdownRule(RewriteRule):
             required.add(col_sql)
 
         return required
-
-
-
 
     def match(self, graph, node_id, context=None):
         if context is None:
@@ -56,7 +56,7 @@ class ProjectionPushdownRule(RewriteRule):
         )
 
         if not parent_is_star:
-            # TODO: this is a navie case for now, parent has only columns
+            # TODO: this is a naive case for now, parent has only columns
             if not all(isinstance(x, exp.Column) for x in parent_selects):
                 return False, None
 
@@ -64,7 +64,21 @@ class ProjectionPushdownRule(RewriteRule):
         children = list(graph.successors(node_id))
         if not children:
             return False, None
+        
+        # all childrem must only reference the parent
+        parent_table_name = node_id.split(".")[-1]
+        for child in children:
+            child_ast = context.get(child)
+            for table in child_ast.find_all(exp.Table):
+                if table.name != parent_table_name:
+                    print(
+                        f"[INFO] Child {child} references table {table.name}, "
+                        f"not parent {parent_table_name}"
+                    )
+                    return False, None
 
+        # get all column references from children
+        # should check whether it is from the parent
         required_cols: set[str] = set()
         for child in children:
             child_ast = context.get(child)
@@ -72,7 +86,7 @@ class ProjectionPushdownRule(RewriteRule):
                 continue
 
             # all cols referenced by child
-            # TODO: this is a navie way, may not work on call cases like alias
+            # TODO: this is a naive way, may not work on call cases like alias
             cols = self._required_columns_from_child(child_ast)
             required_cols |= cols
 
